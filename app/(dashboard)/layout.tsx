@@ -1,3 +1,9 @@
-// Dashboard layout
-// Will contain: Layout with sidebar and header for all dashboard pages
+import { DashboardLayout } from "@/components/layout/DashboardLayout";
 
+export default function DashboardRootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return <DashboardLayout>{children}</DashboardLayout>;
+}

@@ -1,0 +1,51 @@
+-- Supabase Database Schema for DramaWeb Admin Dashboard
+-- This file documents the expected database structure
+-- Run these SQL commands in your Supabase SQL Editor
+
+-- Movies Table
+-- CREATE TABLE movies (
+--   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+--   title VARCHAR(255) NOT NULL,
+--   description TEXT,
+--   genre VARCHAR(100),
+--   release_date DATE,
+--   duration INTEGER, -- in minutes
+--   thumbnail_url TEXT,
+--   video_url TEXT,
+--   subtitle_url TEXT,
+--   status VARCHAR(50) DEFAULT 'draft', -- draft, published, archived
+--   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+--   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+-- );
+
+-- Users Table (extends Supabase auth.users)
+-- CREATE TABLE user_profiles (
+--   id UUID PRIMARY KEY REFERENCES auth.users(id),
+--   email VARCHAR(255) NOT NULL,
+--   full_name VARCHAR(255),
+--   subscription_type VARCHAR(50), -- free, premium, etc.
+--   subscription_status VARCHAR(50), -- active, expired, cancelled
+--   subscription_expires_at TIMESTAMP WITH TIME ZONE,
+--   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+--   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+-- );
+
+-- Payments Table
+-- CREATE TABLE payments (
+--   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+--   user_id UUID REFERENCES user_profiles(id) ON DELETE CASCADE,
+--   amount DECIMAL(10, 2) NOT NULL,
+--   currency VARCHAR(3) DEFAULT 'USD',
+--   payment_method VARCHAR(50), -- credit_card, paypal, etc.
+--   payment_status VARCHAR(50) NOT NULL, -- pending, completed, failed, refunded
+--   transaction_id VARCHAR(255),
+--   description TEXT,
+--   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+-- );
+
+-- Indexes for better query performance
+-- CREATE INDEX idx_movies_status ON movies(status);
+-- CREATE INDEX idx_movies_created_at ON movies(created_at);
+-- CREATE INDEX idx_payments_user_id ON payments(user_id);
+-- CREATE INDEX idx_payments_status ON payments(payment_status);
+-- CREATE INDEX idx_payments_created_at ON payments(created_at);
