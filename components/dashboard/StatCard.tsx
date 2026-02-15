@@ -14,13 +14,13 @@ interface StatCardProps {
 
 export function StatCard({ title, value, subtitle, icon, trend }: StatCardProps) {
   return (
-    <Card padding="md" className="hover:border-slate-700 transition-colors">
+    <Card padding="md" className="hover:border-slate-300 dark:hover:border-slate-700 transition-colors">
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-sm font-medium text-slate-400">{title}</p>
-          <p className="mt-2 text-2xl font-bold text-white">{value}</p>
+          <p className="text-sm font-medium text-slate-600 dark:text-slate-400">{title}</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{value}</p>
           {subtitle && (
-            <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-500">{subtitle}</p>
           )}
           {trend && (
             <p
@@ -33,7 +33,7 @@ export function StatCard({ title, value, subtitle, icon, trend }: StatCardProps)
           )}
         </div>
         {icon && (
-          <div className="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-400">
+          <div className="w-12 h-12 rounded-xl bg-red-500/20 flex items-center justify-center text-red-400">
             {icon}
           </div>
         )}

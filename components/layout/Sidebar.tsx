@@ -7,10 +7,19 @@ import { usePathname } from "next/navigation";
 const navItems = [
   { href: "/overview", label: "Overview", icon: LayoutDashboardIcon },
   { href: "/movies", label: "Movies", icon: FilmIcon },
+  { href: "/plans", label: "Subscription Plans", icon: SubscriptionIcon },
   { href: "/users", label: "Users", icon: UsersIcon },
   { href: "/payments", label: "Payments", icon: CreditCardIcon },
   { href: "/upload", label: "Upload", icon: UploadIcon },
 ];
+
+function SubscriptionIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+    </svg>
+  );
+}
 
 function LayoutDashboardIcon({ className }: { className?: string }) {
   return (
@@ -56,17 +65,17 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-64 flex-shrink-0 border-r border-slate-800 bg-slate-950/50 flex flex-col">
-      <div className="p-4 border-b border-slate-800">
+    <aside className="w-64 flex-shrink-0 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/50 flex flex-col">
+      <div className="p-4 border-b border-slate-200 dark:border-slate-800">
         <Link href="/overview" className="flex items-center gap-2">
           <Image
             src="/logo.png"
             alt="ReelTime"
             width={36}
             height={36}
-            className="rounded-lg object-contain flex-shrink-0"
+            className="rounded-lg object-contain shrink-0"
           />
-          <span className="font-semibold text-white text-lg tracking-tight">
+          <span className="font-semibold text-slate-900 dark:text-white text-lg tracking-tight">
             ReelTime
           </span>
         </Link>
@@ -83,19 +92,19 @@ export function Sidebar() {
                 transition-colors
                 ${
                   isActive
-                    ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                    : "text-slate-400 hover:text-white hover:bg-slate-800/80"
+                    ? "bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/30"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/80"
                 }
               `}
             >
-              <item.icon className="w-5 h-5 flex-shrink-0" />
+              <item.icon className="w-5 h-5 shrink-0" />
               {item.label}
             </Link>
           );
         })}
       </nav>
-      <div className="p-4 border-t border-slate-800">
-        <p className="text-xs text-slate-500">Admin Dashboard v1.0</p>
+      <div className="p-4 border-t border-slate-200 dark:border-slate-800">
+        <p className="text-xs text-slate-600 dark:text-slate-500">Admin Dashboard v1.0</p>
       </div>
     </aside>
   );

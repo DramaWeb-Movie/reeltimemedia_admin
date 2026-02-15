@@ -19,8 +19,8 @@ export function UserList({ users, isLoading }: UserListProps) {
   if (users.length === 0) {
     return (
       <div className="text-center py-16">
-        <p className="text-slate-500">No users found.</p>
-        <p className="text-sm text-slate-600 mt-1">
+        <p className="text-slate-600 dark:text-slate-500">No users found.</p>
+        <p className="text-sm text-slate-600 dark:text-slate-500 mt-1">
           Try adjusting your filters.
         </p>
       </div>

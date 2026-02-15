@@ -28,30 +28,30 @@ export function PaymentCard({ payment }: PaymentCardProps) {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 flex-wrap">
-            <p className="font-semibold text-white">
+            <p className="font-semibold text-slate-900 dark:text-white">
               ${payment.amount.toFixed(2)} {payment.currency}
             </p>
             <Badge variant={statusBadge[payment.payment_status]}>
               {payment.payment_status}
             </Badge>
           </div>
-          <p className="text-sm text-slate-400 mt-1">
+          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
             {payment.description ?? "Payment"}
           </p>
-          <p className="text-sm text-slate-500 mt-0.5">{userLabel}</p>
+          <p className="text-sm text-slate-600 dark:text-slate-500 mt-0.5">{userLabel}</p>
           <p className="text-xs text-slate-600 mt-1">
             {formattedDate} at {formattedTime}
           </p>
         </div>
         <div className="text-right flex-shrink-0">
-          <p className="text-xs text-slate-500">Method</p>
-          <p className="text-sm text-slate-300 capitalize">
+          <p className="text-xs text-slate-600 dark:text-slate-500">Method</p>
+          <p className="text-sm text-slate-700 dark:text-slate-300 capitalize">
             {payment.payment_method.replace("_", " ")}
           </p>
           {payment.transaction_id && (
             <>
-              <p className="text-xs text-slate-500 mt-2">Transaction</p>
-              <p className="text-xs font-mono text-slate-400 truncate max-w-[140px]">
+              <p className="text-xs text-slate-600 dark:text-slate-500 mt-2">Transaction</p>
+              <p className="text-xs font-mono text-slate-600 dark:text-slate-400 truncate max-w-[140px]">
                 {payment.transaction_id}
               </p>
             </>

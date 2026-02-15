@@ -53,7 +53,7 @@ export function Modal({
       <div
         className={`
           relative w-full ${sizeStyles[size]}
-          bg-slate-900 border border-slate-700 rounded-xl shadow-2xl
+          bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl
           opacity-0 animate-[fadeIn_0.2s_ease-out_forwards]
         `}
         role="dialog"
@@ -61,16 +61,16 @@ export function Modal({
         aria-labelledby={title ? "modal-title" : undefined}
       >
         {title && (
-          <div className="flex items-center justify-between p-6 border-b border-slate-800">
+          <div className="flex items-center justify-between p-6 border-b border-slate-200 dark:border-slate-800">
             <h2
               id="modal-title"
-              className="text-lg font-semibold text-white"
+              className="text-lg font-semibold text-slate-900 dark:text-white"
             >
               {title}
             </h2>
             <button
               onClick={onClose}
-              className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+              className="p-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
               aria-label="Close modal"
             >
               <svg

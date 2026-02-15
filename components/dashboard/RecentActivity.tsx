@@ -64,29 +64,29 @@ export function RecentActivity({ activities }: RecentActivityProps) {
       <CardHeader title="Recent Activity" subtitle="Latest updates across the platform" />
       <div className="space-y-4">
         {activities.length === 0 ? (
-          <p className="text-slate-500 text-sm py-8 text-center">
+          <p className="text-slate-600 dark:text-slate-500 text-sm py-8 text-center">
             No recent activity
           </p>
         ) : (
           activities.map((activity) => (
             <div
               key={activity.id}
-              className="flex gap-4 p-3 rounded-lg hover:bg-slate-800/30 transition-colors"
+              className="flex gap-4 p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors"
             >
-              <div className="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center text-amber-400 flex-shrink-0">
+              <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-red-400 shrink-0">
                 {getActivityIcon(activity.type)}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-sm font-medium text-white">
+                  <p className="text-sm font-medium text-slate-900 dark:text-white">
                     {activity.title}
                   </p>
                   {getActivityBadge(activity.type)}
                 </div>
-                <p className="text-sm text-slate-400 mt-0.5">
+                <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">
                   {activity.description}
                 </p>
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-xs text-slate-600 dark:text-slate-500 mt-1">
                   {formatTimestamp(activity.timestamp)}
                 </p>
               </div>

@@ -13,15 +13,15 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantStyles: Record<ButtonVariant, string> = {
   primary:
-    "bg-amber-500 text-black hover:bg-amber-400 focus:ring-amber-500/50",
+    "bg-red-500 text-white hover:bg-red-600 focus:ring-red-500/50",
   secondary:
-    "bg-slate-700 text-slate-100 hover:bg-slate-600 focus:ring-slate-500/50",
+    "bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-100 hover:bg-slate-300 dark:hover:bg-slate-600 focus:ring-slate-500/50",
   ghost:
-    "bg-transparent text-slate-300 hover:bg-slate-800/80 hover:text-white focus:ring-slate-500/50",
+    "bg-transparent text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white focus:ring-slate-500/50",
   danger:
     "bg-red-600 text-white hover:bg-red-500 focus:ring-red-500/50",
   outline:
-    "border border-slate-600 bg-transparent text-slate-300 hover:bg-slate-800/80 hover:border-slate-500 focus:ring-slate-500/50",
+    "border border-slate-300 dark:border-slate-600 bg-transparent text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:border-slate-400 dark:hover:border-slate-500 focus:ring-slate-500/50",
 };
 
 const sizeStyles: Record<ButtonSize, string> = {
@@ -51,7 +51,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         disabled={disabled || isLoading}
         className={`
           inline-flex items-center justify-center font-medium rounded-lg
-          transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900
+          transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-slate-900
           disabled:opacity-50 disabled:cursor-not-allowed
           ${variantStyles[variant]}
           ${sizeStyles[size]}

@@ -61,7 +61,7 @@ const MOCK_CHART: RevenueChartData = {
     {
       label: "Revenue",
       data: [12000, 15000, 14000, 18000, 22000, 89420],
-      color: "bg-amber-500",
+      color: "bg-red-500",
     },
     {
       label: "Subscriptions",

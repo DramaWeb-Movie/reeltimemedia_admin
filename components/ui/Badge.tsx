@@ -14,7 +14,7 @@ interface BadgeProps {
 
 const variantStyles: Record<BadgeVariant, string> = {
   default:
-    "bg-slate-700/80 text-slate-300 border-slate-600",
+    "bg-slate-200 dark:bg-slate-700/80 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600",
   success:
     "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
   warning:
@@ -24,7 +24,7 @@ const variantStyles: Record<BadgeVariant, string> = {
   info:
     "bg-blue-500/20 text-blue-400 border-blue-500/30",
   neutral:
-    "bg-slate-600/50 text-slate-400 border-slate-600",
+    "bg-slate-100 dark:bg-slate-600/50 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-600",
 };
 
 export function Badge({

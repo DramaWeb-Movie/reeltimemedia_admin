@@ -27,7 +27,7 @@ export function Chart({ data, title = "Revenue", subtitle }: ChartProps) {
               {data.datasets.map((dataset, j) => {
                 const height = (dataset.data[i] / maxValue) * 100;
                 const color =
-                  dataset.color ?? (j === 0 ? "bg-amber-500" : "bg-slate-600");
+                  dataset.color ?? (j === 0 ? "bg-red-500" : "bg-slate-600");
                 return (
                   <div
                     key={j}
@@ -38,7 +38,7 @@ export function Chart({ data, title = "Revenue", subtitle }: ChartProps) {
                 );
               })}
             </div>
-            <span className="text-xs text-slate-500 truncate max-w-full">
+            <span className="text-xs text-slate-600 dark:text-slate-500 truncate max-w-full">
               {label}
             </span>
           </div>
@@ -49,10 +49,10 @@ export function Chart({ data, title = "Revenue", subtitle }: ChartProps) {
           <div key={i} className="flex items-center gap-2">
             <div
               className={`w-3 h-3 rounded ${
-                dataset.color ?? (i === 0 ? "bg-amber-500" : "bg-slate-600")
+                dataset.color ?? (i === 0 ? "bg-red-500" : "bg-slate-600")
               }`}
             />
-            <span className="text-sm text-slate-400">{dataset.label}</span>
+            <span className="text-sm text-slate-600 dark:text-slate-400">{dataset.label}</span>
           </div>
         ))}
       </div>

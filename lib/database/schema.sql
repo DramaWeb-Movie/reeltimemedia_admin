@@ -14,6 +14,31 @@
 --   video_url TEXT,
 --   subtitle_url TEXT,
 --   status VARCHAR(50) DEFAULT 'draft', -- draft, published, archived
+--   type VARCHAR(50) NOT NULL, -- 'series' or 'single'
+--   price DECIMAL(10, 2), -- for single movies: one-time purchase ($2-3)
+--   free_episodes_count INTEGER, -- for series: episodes user can watch without subscription (2-3)
+--   subscription_plan_id UUID REFERENCES subscription_plans(id), -- for series
+--   total_episodes INTEGER, -- for series
+--   cast TEXT, -- comma-separated actor names
+--   director VARCHAR(255),
+--   producer VARCHAR(255),
+--   country VARCHAR(100),
+--   language VARCHAR(100),
+--   content_rating VARCHAR(20), -- G, PG, PG-13, R, NC-17, TV-MA
+--   tags TEXT, -- comma-separated
+--   trailer_url TEXT,
+--   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+--   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+-- );
+--
+-- Subscription Plans Table (for series access)
+-- CREATE TABLE subscription_plans (
+--   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+--   name VARCHAR(100) NOT NULL,
+--   price DECIMAL(10, 2) NOT NULL,
+--   currency VARCHAR(3) DEFAULT 'USD',
+--   billing_period VARCHAR(20) NOT NULL, -- 'monthly' or 'yearly'
+--   description TEXT,
 --   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 --   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 -- );

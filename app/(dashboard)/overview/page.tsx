@@ -52,8 +52,8 @@ export default function OverviewPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-white">Overview</h1>
-        <p className="mt-1 text-slate-400">
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Overview</h1>
+        <p className="mt-1 text-slate-600 dark:text-slate-400">
           Welcome back. Here&apos;s what&apos;s happening with your platform.
         </p>
       </div>

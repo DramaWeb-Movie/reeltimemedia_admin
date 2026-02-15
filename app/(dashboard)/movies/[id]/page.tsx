@@ -40,7 +40,7 @@ export default function MovieDetailPage() {
   if (!movie) {
     return (
       <div className="text-center py-16">
-        <p className="text-slate-500">Movie not found.</p>
+        <p className="text-slate-600 dark:text-slate-500">Movie not found.</p>
         <Link href="/movies">
           <Button variant="secondary" className="mt-4">
             Back to Movies
@@ -49,6 +49,8 @@ export default function MovieDetailPage() {
       </div>
     );
   }
+
+  const isSeries = movie.type === "series";
 
   return (
     <div className="space-y-6">
@@ -62,7 +64,7 @@ export default function MovieDetailPage() {
 
       <div className="flex flex-col lg:flex-row gap-6">
         <div className="lg:w-80 flex-shrink-0">
-          <div className="aspect-[2/3] rounded-xl bg-slate-800 flex items-center justify-center overflow-hidden">
+          <div className="aspect-[2/3] rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden">
             {movie.thumbnail_url ? (
               <img
                 src={movie.thumbnail_url}
@@ -71,7 +73,7 @@ export default function MovieDetailPage() {
               />
             ) : (
               <svg
-                className="w-24 h-24 text-slate-600"
+                className="w-24 h-24 text-slate-400 dark:text-slate-600"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -89,10 +91,13 @@ export default function MovieDetailPage() {
         <div className="flex-1 space-y-6">
           <div>
             <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-2xl font-bold text-white">{movie.title}</h1>
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{movie.title}</h1>
+              <Badge variant={isSeries ? "info" : "default"}>
+                {isSeries ? "Series" : "Single Movie"}
+              </Badge>
               <Badge variant={statusBadge[movie.status]}>{movie.status}</Badge>
             </div>
-            <div className="flex gap-4 mt-2 text-slate-400 text-sm">
+            <div className="flex gap-4 mt-2 text-slate-600 dark:text-slate-400 text-sm flex-wrap">
               {movie.genre && <span>{movie.genre}</span>}
               {movie.release_date && (
                 <span>{new Date(movie.release_date).toLocaleDateString()}</span>
@@ -101,39 +106,69 @@ export default function MovieDetailPage() {
             </div>
           </div>
 
+          {/* Pricing / Access info */}
+          <Card>
+            <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-4">
+              {isSeries ? "Access" : "Pricing"}
+            </h3>
+            {isSeries ? (
+              <div className="space-y-2">
+                <p className="text-slate-700 dark:text-white">
+                  <span className="text-slate-600 dark:text-slate-500">Subscription required</span> — Users must have an active subscription to watch.
+                </p>
+                <p className="text-slate-600 dark:text-slate-300">
+                  <span className="font-medium text-slate-900 dark:text-white">{movie.free_episodes_count ?? 0} free preview episodes</span> — Users can watch without subscribing.
+                </p>
+                {movie.total_episodes != null && (
+                  <p className="text-slate-600 dark:text-slate-400 text-sm">
+                    {movie.total_episodes} total episodes
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-xl font-bold text-emerald-400">
+                ${movie.price?.toFixed(2) ?? "—"} <span className="text-sm font-normal text-slate-600 dark:text-slate-400">one-time purchase</span>
+              </p>
+            )}
+          </Card>
+
           {movie.description && (
             <Card>
-              <h3 className="text-sm font-medium text-slate-400 mb-2">Description</h3>
-              <p className="text-slate-300 whitespace-pre-wrap">{movie.description}</p>
+              <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">Description</h3>
+              <p className="text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{movie.description}</p>
             </Card>
           )}
 
           <Card>
-            <h3 className="text-sm font-medium text-slate-400 mb-4">Details</h3>
+            <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-4">Details</h3>
             <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
               <div>
-                <dt className="text-slate-500">Status</dt>
-                <dd className="text-white font-medium">{movie.status}</dd>
+                <dt className="text-slate-600 dark:text-slate-500">Type</dt>
+                <dd className="text-slate-900 dark:text-white font-medium">{movie.type}</dd>
               </div>
               <div>
-                <dt className="text-slate-500">Genre</dt>
-                <dd className="text-white">{movie.genre ?? "—"}</dd>
+                <dt className="text-slate-600 dark:text-slate-500">Status</dt>
+                <dd className="text-slate-900 dark:text-white">{movie.status}</dd>
               </div>
               <div>
-                <dt className="text-slate-500">Release Date</dt>
-                <dd className="text-white">
+                <dt className="text-slate-600 dark:text-slate-500">Genre</dt>
+                <dd className="text-slate-900 dark:text-white">{movie.genre ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-slate-600 dark:text-slate-500">Release Date</dt>
+                <dd className="text-slate-900 dark:text-white">
                   {movie.release_date
                     ? new Date(movie.release_date).toLocaleDateString()
                     : "—"}
                 </dd>
               </div>
               <div>
-                <dt className="text-slate-500">Duration</dt>
-                <dd className="text-white">{movie.duration ? `${movie.duration} min` : "—"}</dd>
+                <dt className="text-slate-600 dark:text-slate-500">Duration</dt>
+                <dd className="text-slate-900 dark:text-white">{movie.duration ? `${movie.duration} min` : "—"}</dd>
               </div>
               <div className="sm:col-span-2">
-                <dt className="text-slate-500">Video URL</dt>
-                <dd className="text-white break-all">{movie.video_url ?? "—"}</dd>
+                <dt className="text-slate-600 dark:text-slate-500">Video URL</dt>
+                <dd className="text-slate-900 dark:text-white break-all">{movie.video_url ?? "—"}</dd>
               </div>
             </dl>
           </Card>

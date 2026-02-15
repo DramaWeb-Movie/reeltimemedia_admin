@@ -16,8 +16,8 @@ export default function UsersPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">Users</h1>
-        <p className="mt-1 text-slate-400">Manage your user base and subscriptions.</p>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Users</h1>
+        <p className="mt-1 text-slate-600 dark:text-slate-400">Manage your user base and subscriptions.</p>
       </div>
 
       <UserFilters

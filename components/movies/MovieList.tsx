@@ -19,8 +19,8 @@ export function MovieList({ movies, isLoading }: MovieListProps) {
   if (movies.length === 0) {
     return (
       <div className="text-center py-16">
-        <p className="text-slate-500">No movies found.</p>
-        <p className="text-sm text-slate-600 mt-1">
+        <p className="text-slate-600 dark:text-slate-500">No movies found.</p>
+        <p className="text-sm text-slate-600 dark:text-slate-500 mt-1">
           Try adjusting your filters or add a new movie.
         </p>
       </div>

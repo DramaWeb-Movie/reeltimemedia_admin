@@ -18,12 +18,13 @@ export function MovieCard({ movie }: MovieCardProps) {
     ? new Date(movie.release_date).toLocaleDateString()
     : "—";
   const duration = movie.duration ? `${movie.duration} min` : "—";
+  const isSeries = movie.type === "series";
 
   return (
     <Link href={`/movies/${movie.id}`}>
-      <Card className="cursor-pointer hover:border-slate-700 transition-all group">
+      <Card className="cursor-pointer hover:border-slate-300 dark:hover:border-slate-700 transition-all group">
         <div className="flex gap-4">
-          <div className="w-24 h-32 flex-shrink-0 rounded-lg bg-slate-800 flex items-center justify-center group-hover:bg-slate-700 transition-colors">
+          <div className="w-24 h-32 flex-shrink-0 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center group-hover:bg-slate-200 dark:group-hover:bg-slate-700 transition-colors">
             {movie.thumbnail_url ? (
               <img
                 src={movie.thumbnail_url}
@@ -48,22 +49,36 @@ export function MovieCard({ movie }: MovieCardProps) {
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2">
-              <h3 className="font-semibold text-white group-hover:text-amber-400 transition-colors truncate">
+              <h3 className="font-semibold text-slate-900 dark:text-white group-hover:text-red-500 dark:group-hover:text-red-400 transition-colors truncate">
                 {movie.title}
               </h3>
-              <Badge variant={statusBadge[movie.status]}>{movie.status}</Badge>
+              <div className="flex items-center gap-2 shrink-0">
+                <Badge variant={isSeries ? "info" : "default"}>
+                  {isSeries ? "Series" : "Single"}
+                </Badge>
+                <Badge variant={statusBadge[movie.status]}>{movie.status}</Badge>
+              </div>
             </div>
             {movie.genre && (
-              <p className="text-sm text-slate-400 mt-1">{movie.genre}</p>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{movie.genre}</p>
             )}
             {movie.description && (
-              <p className="text-sm text-slate-500 mt-2 line-clamp-2">
+              <p className="text-sm text-slate-600 dark:text-slate-500 mt-2 line-clamp-2">
                 {movie.description}
               </p>
             )}
-            <div className="flex gap-4 mt-3 text-xs text-slate-500">
+            <div className="flex gap-4 mt-3 text-xs text-slate-600 dark:text-slate-500 flex-wrap">
               <span>{formattedDate}</span>
               <span>{duration}</span>
+              {isSeries ? (
+                <span className="text-red-400">
+                  Subscription • {movie.free_episodes_count ?? 0} free eps
+                </span>
+              ) : (
+                movie.price != null && (
+                  <span className="text-emerald-400">${movie.price.toFixed(2)}</span>
+                )
+              )}
             </div>
           </div>
         </div>

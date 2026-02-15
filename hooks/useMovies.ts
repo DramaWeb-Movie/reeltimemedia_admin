@@ -15,6 +15,11 @@ const MOCK_MOVIES: Movie[] = [
     video_url: null,
     subtitle_url: null,
     status: "published",
+    type: "single",
+    price: 2.99,
+    free_episodes_count: null,
+    subscription_plan_id: null,
+    total_episodes: null,
     created_at: "2024-01-10T00:00:00Z",
     updated_at: "2024-01-15T00:00:00Z",
   },
@@ -29,6 +34,11 @@ const MOCK_MOVIES: Movie[] = [
     video_url: null,
     subtitle_url: null,
     status: "published",
+    type: "single",
+    price: 2.49,
+    free_episodes_count: null,
+    subscription_plan_id: null,
+    total_episodes: null,
     created_at: "2024-01-20T00:00:00Z",
     updated_at: "2024-02-01T00:00:00Z",
   },
@@ -43,6 +53,11 @@ const MOCK_MOVIES: Movie[] = [
     video_url: null,
     subtitle_url: null,
     status: "draft",
+    type: "series",
+    price: null,
+    free_episodes_count: 3,
+    subscription_plan_id: "1",
+    total_episodes: 12,
     created_at: "2024-02-15T00:00:00Z",
     updated_at: "2024-02-20T00:00:00Z",
   },
@@ -57,12 +72,24 @@ const MOCK_MOVIES: Movie[] = [
     video_url: null,
     subtitle_url: null,
     status: "archived",
+    type: "single",
+    price: 2.99,
+    free_episodes_count: null,
+    subscription_plan_id: null,
+    total_episodes: null,
     created_at: "2023-12-01T00:00:00Z",
     updated_at: "2024-01-01T00:00:00Z",
   },
 ];
 
-export function useMovies(statusFilter?: string, searchQuery?: string) {
+export interface UseMoviesFilters {
+  status?: string;
+  type?: string;
+  search?: string;
+}
+
+export function useMovies(filters: UseMoviesFilters = {}) {
+  const { status = "", type = "", search = "" } = filters;
   const [movies, setMovies] = useState<Movie[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -71,8 +98,9 @@ export function useMovies(statusFilter?: string, searchQuery?: string) {
       setIsLoading(true);
       try {
         const params = new URLSearchParams();
-        if (statusFilter) params.set("status", statusFilter);
-        if (searchQuery) params.set("search", searchQuery);
+        if (status) params.set("status", status);
+        if (type) params.set("type", type);
+        if (search) params.set("search", search);
         const res = await fetch(`/api/movies?${params}`);
         if (res.ok) {
           const data = await res.json();
@@ -87,7 +115,7 @@ export function useMovies(statusFilter?: string, searchQuery?: string) {
       }
     };
     load();
-  }, [statusFilter, searchQuery]);
+  }, [status, type, search]);
 
   return { movies, isLoading };
 }

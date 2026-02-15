@@ -20,8 +20,8 @@ export function Card({
   return (
     <div
       className={`
-        bg-slate-900/50 border border-slate-800 rounded-xl
-        backdrop-blur-sm
+        bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl
+        backdrop-blur-sm shadow-sm dark:shadow-none
         ${paddingStyles[padding]}
         ${className}
       `}
@@ -42,9 +42,9 @@ export function CardHeader({ title, subtitle, action }: CardHeaderProps) {
   return (
     <div className="flex items-start justify-between gap-4 mb-6">
       <div>
-        <h2 className="text-lg font-semibold text-white">{title}</h2>
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{title}</h2>
         {subtitle && (
-          <p className="mt-1 text-sm text-slate-400">{subtitle}</p>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{subtitle}</p>
         )}
       </div>
       {action && <div className="flex-shrink-0">{action}</div>}
