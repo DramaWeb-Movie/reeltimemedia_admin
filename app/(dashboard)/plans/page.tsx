@@ -32,12 +32,50 @@ export default function PlansPage() {
   const handleOpenAdd = () => {
     setEditingPlan(null);
     setForm({ name: "", price: "", billing_period: "monthly", description: "" });
+    setSaveError(null);
     setShowModal(true);
   };
 
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const refetchPlans = () => {
+    return fetch("/api/plans")
+      .then((res) => (res.ok ? res.json() : { plans: [] }))
+      .then((data) => setPlans(data.plans ?? []))
+      .catch(() => setPlans([]));
+  };
+
   const handleSave = async () => {
-    // TODO: POST to API
-    setShowModal(false);
+    setSaveError(null);
+    setIsSaving(true);
+    try {
+      const payload = {
+        name: form.name.trim(),
+        price: parseFloat(form.price) || 0,
+        billing_period: form.billing_period,
+        description: form.description.trim() || null,
+        currency: "USD",
+      };
+      const url = editingPlan ? `/api/plans/${editingPlan.id}` : "/api/plans";
+      const method = editingPlan ? "PUT" : "POST";
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSaveError(data.error || "Failed to save plan");
+        return;
+      }
+      setShowModal(false);
+      await refetchPlans();
+    } catch {
+      setSaveError("Failed to save plan");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const formatPrice = (plan: SubscriptionPlan) => {
@@ -89,6 +127,7 @@ export default function PlansPage() {
                     billing_period: plan.billing_period,
                     description: plan.description ?? "",
                   });
+                  setSaveError(null);
                   setShowModal(true);
                 }}
               >
@@ -160,9 +199,14 @@ export default function PlansPage() {
               className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500"
             />
           </div>
+          {saveError && (
+            <p className="text-sm text-red-500">{saveError}</p>
+          )}
           <div className="flex gap-3 pt-2">
-            <Button type="submit">Save</Button>
-            <Button type="button" variant="outline" onClick={() => setShowModal(false)}>
+            <Button type="submit" disabled={isSaving}>
+              {isSaving ? "Saving…" : "Save"}
+            </Button>
+            <Button type="button" variant="outline" onClick={() => setShowModal(false)} disabled={isSaving}>
               Cancel
             </Button>
           </div>

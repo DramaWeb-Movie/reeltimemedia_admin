@@ -15,32 +15,12 @@ function mapRow(row: Record<string, unknown>): SubscriptionPlan {
   };
 }
 
-export async function GET() {
+export async function PUT(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
-    const supabase = createAdminClient();
-    const { data, error } = await supabase
-      .from("subscription_plans")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      return NextResponse.json(
-        { error: "Failed to fetch subscription plans" },
-        { status: 500 }
-      );
-    }
-    const plans = (data ?? []).map(mapRow);
-    return NextResponse.json({ plans });
-  } catch {
-    return NextResponse.json(
-      { error: "Failed to fetch subscription plans" },
-      { status: 500 }
-    );
-  }
-}
-
-export async function POST(request: Request) {
-  try {
+    const { id } = await params;
     const body = await request.json();
     const name = body.name?.trim();
     const price = parseFloat(body.price);
@@ -58,7 +38,7 @@ export async function POST(request: Request) {
     const supabase = createAdminClient();
     const { data, error } = await supabase
       .from("subscription_plans")
-      .insert({
+      .update({
         name,
         price,
         currency,
@@ -66,19 +46,23 @@ export async function POST(request: Request) {
         description,
         updated_at: new Date().toISOString(),
       })
+      .eq("id", id)
       .select()
       .single();
 
     if (error) {
       return NextResponse.json(
-        { error: error.message || "Failed to create plan" },
+        { error: error.message || "Failed to update plan" },
         { status: 500 }
       );
+    }
+    if (!data) {
+      return NextResponse.json({ error: "Plan not found" }, { status: 404 });
     }
     return NextResponse.json({ plan: mapRow(data) });
   } catch {
     return NextResponse.json(
-      { error: "Failed to create subscription plan" },
+      { error: "Failed to update subscription plan" },
       { status: 500 }
     );
   }

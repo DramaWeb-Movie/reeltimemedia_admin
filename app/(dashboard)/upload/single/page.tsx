@@ -61,10 +61,39 @@ export default function SingleMovieUploadPage() {
       handleNext();
       return;
     }
+    if (!singleVideoFile || !thumbnailFile) {
+      toastError("Video and thumbnail are required");
+      return;
+    }
     setIsUploading(true);
     try {
-      await new Promise((r) => setTimeout(r, 1500));
+      const formData = new FormData();
+      formData.set("title", title.trim());
+      formData.set("description", description);
+      formData.set("genre", genre);
+      formData.set("cast", cast);
+      formData.set("price", price);
+      formData.set("releaseDate", releaseDate);
+      formData.set("duration", duration);
+      formData.set("status", status);
+      formData.set("trailerUrl", trailerUrl);
+      formData.set("video", singleVideoFile);
+      formData.set("thumbnail", thumbnailFile);
+      if (subtitleFile) formData.set("subtitle", subtitleFile);
+
+      const res = await fetch("/api/movies/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        toastError(data.error ?? "Failed to upload movie. Please try again.");
+        return;
+      }
       toastSuccess("Movie uploaded successfully");
+      window.location.href = "/movies";
     } catch {
       toastError("Failed to upload movie. Please try again.");
     } finally {
