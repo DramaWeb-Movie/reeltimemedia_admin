@@ -2,7 +2,6 @@
 
 import { StatCard } from "@/components/dashboard/StatCard";
 import { Chart } from "@/components/dashboard/Chart";
-import { RecentActivity } from "@/components/dashboard/RecentActivity";
 import { Spinner } from "@/components/ui/Spinner";
 import { useDashboard } from "@/hooks/useDashboard";
 
@@ -39,7 +38,7 @@ function SubscriptionIcon() {
 }
 
 export default function OverviewPage() {
-  const { stats, activities, chartData, isLoading } = useDashboard();
+  const { stats, chartData, isLoading } = useDashboard();
 
   if (isLoading) {
     return (
@@ -96,20 +95,13 @@ export default function OverviewPage() {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          {chartData && (
-            <Chart
-              data={chartData}
-              title="Revenue Overview"
-              subtitle="Monthly revenue and subscription counts"
-            />
-          )}
-        </div>
-        <div>
-          <RecentActivity activities={activities} />
-        </div>
-      </div>
+      {chartData && chartData.labels.length > 0 && (
+        <Chart
+          data={chartData}
+          title="Revenue Overview"
+          subtitle="Monthly revenue and subscription counts"
+        />
+      )}
     </div>
   );
 }
