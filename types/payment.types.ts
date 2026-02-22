@@ -1,6 +1,6 @@
 export type PaymentStatus = "pending" | "completed" | "failed" | "refunded";
 
-export type PaymentMethod = "credit_card" | "paypal" | "bank_transfer" | "other";
+export type PaymentMethod = "credit_card" | "paypal" | "bank_transfer" | "bakong" | "other";
 
 export interface Payment {
   id: string;

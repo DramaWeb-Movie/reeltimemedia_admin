@@ -51,11 +51,12 @@ export default function MovieDetailPage() {
   }
 
   const isSeries = movie.type === "series";
+  const listHref = isSeries ? "/movies/series" : "/movies/single";
 
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Link href="/movies">
+        <Link href={listHref}>
           <Button variant="ghost" size="sm">
             ← Back
           </Button>

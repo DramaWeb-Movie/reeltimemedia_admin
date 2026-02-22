@@ -1,17 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { UserFilters } from "@/components/users/UserFilters";
 import { UserList } from "@/components/users/UserList";
 import { useUsers } from "@/hooks/useUsers";
+import { Button } from "@/components/ui/Button";
 
 export default function UsersPage() {
-  const [search, setSearch] = useState("");
-  const [subscription, setSubscription] = useState("");
-  const { users, isLoading } = useUsers(
-    search || undefined,
-    subscription || undefined
-  );
+  const [page, setPage] = useState(1);
+  const { users, isLoading, hasMore } = useUsers(page);
 
   return (
     <div className="space-y-6">
@@ -20,14 +16,29 @@ export default function UsersPage() {
         <p className="mt-1 text-slate-600 dark:text-slate-400">Manage your user base and subscriptions.</p>
       </div>
 
-      <UserFilters
-        search={search}
-        subscription={subscription}
-        onSearchChange={setSearch}
-        onSubscriptionChange={setSubscription}
-      />
-
       <UserList users={users} isLoading={isLoading} />
+
+      {!isLoading && users.length > 0 && (
+        <div className="flex items-center justify-center gap-4 pt-4">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page <= 1}
+          >
+            Previous
+          </Button>
+          <span className="text-sm text-slate-600 dark:text-slate-400">Page {page}</span>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setPage((p) => p + 1)}
+            disabled={!hasMore}
+          >
+            Next
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

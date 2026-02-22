@@ -1,8 +1,10 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+const PIN_COOKIE = "reeltime-admin-pin";
 const protectedPaths = ["/overview", "/movies", "/payments", "/plans", "/upload", "/users"];
 const authPaths = ["/login"];
+const pinPath = "/pin";
 
 function isProtectedPath(pathname: string): boolean {
   return protectedPaths.some(
@@ -12,6 +14,10 @@ function isProtectedPath(pathname: string): boolean {
 
 function isAuthPath(pathname: string): boolean {
   return authPaths.some((p) => pathname.startsWith(p));
+}
+
+function hasPinCookie(request: NextRequest): boolean {
+  return request.cookies.get(PIN_COOKIE)?.value === "verified";
 }
 
 export async function updateSession(request: NextRequest) {
@@ -55,12 +61,20 @@ export async function updateSession(request: NextRequest) {
     return supabaseResponse;
   }
 
-  // Redirect authenticated users away from login
-  if (isAuthPath(pathname) && user) {
+  // Redirect authenticated users away from login and pin
+  if ((isAuthPath(pathname) || pathname === pinPath) && user) {
     return NextResponse.redirect(new URL("/overview", request.url));
   }
 
-  // Redirect unauthenticated users to login for protected paths
+  // /login requires PIN cookie first – redirect to PIN if not verified
+  if (pathname === "/login" && !user && !hasPinCookie(request)) {
+    const pinUrl = new URL(pinPath, request.url);
+    // Preserve redirect param (e.g. /login?redirect=/movies -> pin redirects back to /login?redirect=/movies)
+    pinUrl.searchParams.set("redirect", pathname + request.nextUrl.search);
+    return NextResponse.redirect(pinUrl);
+  }
+
+  // Redirect unauthenticated users to login for protected paths (login will redirect to pin if needed)
   if (isProtectedPath(pathname) && !user) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("redirect", pathname);

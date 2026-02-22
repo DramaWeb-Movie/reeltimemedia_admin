@@ -1,14 +1,25 @@
 import { redirect } from "next/navigation";
+import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-
-const SESSION_COOKIE = "reeltime-admin-session";
 
 export default async function Home() {
   const cookieStore = await cookies();
-  const session = cookieStore.get(SESSION_COOKIE)?.value;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (session === "authenticated") {
-    redirect("/overview");
+  if (supabaseUrl && supabaseAnonKey) {
+    const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+      },
+    });
+    const { data } = await supabase.auth.getClaims();
+    if (data?.claims) {
+      redirect("/overview");
+    }
   }
-  redirect("/login");
+
+  redirect("/pin");
 }

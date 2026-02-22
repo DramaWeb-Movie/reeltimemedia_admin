@@ -5,8 +5,10 @@ import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { CastInput } from "@/components/ui/CastInput";
 import { Select } from "@/components/ui/Select";
 import { toastError, toastSuccess } from "@/lib/toast";
+import { GENRE_OPTIONS } from "@/lib/constants/genres";
 
 const STEPS = [
   { id: 1, title: "Info", description: "Title, cast" },
@@ -18,6 +20,7 @@ const STEPS = [
 export default function SingleMovieUploadPage() {
   const [step, setStep] = useState(1);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   // Step 1: Basic info + cast
   const [title, setTitle] = useState("");
@@ -66,6 +69,7 @@ export default function SingleMovieUploadPage() {
       return;
     }
     setIsUploading(true);
+    setUploadProgress(0);
     try {
       const formData = new FormData();
       formData.set("title", title.trim());
@@ -81,23 +85,51 @@ export default function SingleMovieUploadPage() {
       formData.set("thumbnail", thumbnailFile);
       if (subtitleFile) formData.set("subtitle", subtitleFile);
 
-      const res = await fetch("/api/movies/upload", {
-        method: "POST",
-        body: formData,
+      const data = await new Promise<{ success?: boolean; error?: string }>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", "/api/movies/upload");
+
+        xhr.upload.addEventListener("progress", (e) => {
+          if (e.lengthComputable && e.total > 0) {
+            // Use browser's calculated total when available
+            const pct = Math.min(99, Math.round((e.loaded / e.total) * 100));
+            setUploadProgress(pct);
+            console.log(`Upload progress: ${e.loaded} / ${e.total} bytes (${pct}%)`);
+          } else {
+            // Fallback: calculate based on video file size (main upload)
+            const pct = Math.min(99, Math.round((e.loaded / singleVideoFile.size) * 100));
+            setUploadProgress(pct);
+            console.log(`Upload progress (estimated): ${e.loaded} bytes (${pct}%)`);
+          }
+        });
+
+        xhr.addEventListener("load", () => {
+          setUploadProgress(100);
+          try {
+            const json = JSON.parse(xhr.responseText);
+            resolve(json);
+          } catch {
+            resolve({ error: "Invalid response" });
+          }
+        });
+
+        xhr.addEventListener("error", () => reject(new Error("Upload failed")));
+        xhr.addEventListener("abort", () => reject(new Error("Upload cancelled")));
+
+        xhr.send(formData);
       });
 
-      const data = await res.json();
-
-      if (!res.ok) {
+      if (!data.success) {
         toastError(data.error ?? "Failed to upload movie. Please try again.");
         return;
       }
       toastSuccess("Movie uploaded successfully");
-      window.location.href = "/movies";
+      window.location.href = "/movies/single";
     } catch {
       toastError("Failed to upload movie. Please try again.");
     } finally {
       setIsUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -162,14 +194,8 @@ export default function SingleMovieUploadPage() {
                 />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Input label="Genre" value={genre} onChange={(e) => setGenre(e.target.value)} placeholder="e.g. Drama, Romance" />
-                <Input
-                  label="Cast"
-                  value={cast}
-                  onChange={(e) => setCast(e.target.value)}
-                  placeholder="Actor 1, Actor 2"
-                  hint="Comma-separated"
-                />
+                <Select label="Genre" options={GENRE_OPTIONS} value={genre} onChange={(e) => setGenre(e.target.value)} placeholder="Select genre" />
+                <CastInput label="Cast" value={cast} onChange={setCast} placeholder="Actor name" />
               </div>
             </div>
           </Card>
@@ -262,9 +288,29 @@ export default function SingleMovieUploadPage() {
           </Card>
         )}
 
+        {isUploading && (
+          <Card>
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-600 dark:text-slate-400">Uploading video...</span>
+                <span className="font-medium text-slate-900 dark:text-white">{uploadProgress}%</span>
+              </div>
+              <div className="h-2.5 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-red-500 to-red-600 transition-all duration-200 ease-linear"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+              <p className="text-xs text-slate-500">
+                Please wait while your video is being uploaded...
+              </p>
+            </div>
+          </Card>
+        )}
+
         <div className="flex gap-3">
-          {step > 1 ? <Button type="button" variant="outline" onClick={handleBack}>Back</Button> : <Link href="/upload"><Button type="button" variant="outline">Cancel</Button></Link>}
-          {step < 4 ? <Button type="submit" disabled={!canProceed()}>Next</Button> : <Button type="submit" isLoading={isUploading}>Upload Movie</Button>}
+          {step > 1 ? <Button type="button" variant="outline" onClick={handleBack} disabled={isUploading}>Back</Button> : <Link href="/upload"><Button type="button" variant="outline" disabled={isUploading}>Cancel</Button></Link>}
+          {step < 4 ? <Button type="submit" disabled={!canProceed()}>Next</Button> : <Button type="submit" isLoading={isUploading} disabled={isUploading}>Upload Movie</Button>}
         </div>
       </form>
     </div>

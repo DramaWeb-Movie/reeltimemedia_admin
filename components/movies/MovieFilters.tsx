@@ -10,6 +10,8 @@ interface MovieFiltersProps {
   onStatusChange: (status: string) => void;
   onTypeChange: (type: string) => void;
   onSearchChange: (search: string) => void;
+  /** When false, the type dropdown is hidden (e.g. on /movies/single or /movies/series). */
+  showTypeFilter?: boolean;
 }
 
 export function MovieFilters({
@@ -19,6 +21,7 @@ export function MovieFilters({
   onStatusChange,
   onTypeChange,
   onSearchChange,
+  showTypeFilter = true,
 }: MovieFiltersProps) {
   return (
     <div className="flex flex-col sm:flex-row gap-4 flex-wrap">
@@ -28,16 +31,18 @@ export function MovieFilters({
         onChange={(e) => onSearchChange(e.target.value)}
         className="sm:max-w-xs"
       />
-      <Select
-        options={[
-          { value: "", label: "All types" },
-          { value: "series", label: "Series" },
-          { value: "single", label: "Single Movie" },
-        ]}
-        value={type}
-        onChange={(e) => onTypeChange(e.target.value)}
-        className="sm:w-36"
-      />
+      {showTypeFilter && (
+        <Select
+          options={[
+            { value: "", label: "All types" },
+            { value: "series", label: "Series" },
+            { value: "single", label: "Single Movie" },
+          ]}
+          value={type}
+          onChange={(e) => onTypeChange(e.target.value)}
+          className="sm:w-36"
+        />
+      )}
       <Select
         options={[
           { value: "", label: "All statuses" },

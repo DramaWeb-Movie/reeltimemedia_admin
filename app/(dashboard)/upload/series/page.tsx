@@ -5,8 +5,10 @@ import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { CastInput } from "@/components/ui/CastInput";
 import { Select } from "@/components/ui/Select";
 import { toastError, toastSuccess } from "@/lib/toast";
+import { GENRE_OPTIONS } from "@/lib/constants/genres";
 import type { EpisodeInput } from "@/types";
 
 type SeriesAccess = "membership" | "free";
@@ -195,8 +197,8 @@ export default function SeriesUploadPage() {
                 />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Input label="Genre" value={genre} onChange={(e) => setGenre(e.target.value)} placeholder="e.g. Drama, Romance" />
-                <Input label="Cast" value={cast} onChange={(e) => setCast(e.target.value)} placeholder="Actor 1, Actor 2" hint="Comma-separated" />
+                <Select label="Genre" options={GENRE_OPTIONS} value={genre} onChange={(e) => setGenre(e.target.value)} placeholder="Select genre" />
+                <CastInput label="Cast" value={cast} onChange={setCast} placeholder="Actor name" />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Input label="Release Date" type="date" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)} />
