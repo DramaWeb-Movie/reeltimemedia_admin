@@ -20,8 +20,9 @@ export function Card({
   return (
     <div
       className={`
-        bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl
-        backdrop-blur-sm shadow-sm dark:shadow-none
+        bg-white dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-700/80 rounded-2xl
+        shadow-sm hover:shadow dark:shadow-none dark:hover:shadow-none
+        backdrop-blur-sm transition-shadow
         ${paddingStyles[padding]}
         ${className}
       `}

@@ -30,16 +30,18 @@ export default function SingleMoviesPage() {
         <div>
           <Link
             href="/movies"
-            className="text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white mb-2 inline-block"
+            className="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white mb-2 inline-block transition-colors"
           >
             ← Movies
           </Link>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Single Movies</h1>
-          <p className="mt-1 text-slate-600 dark:text-slate-400">
+          <h1 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
+            Single Movies
+          </h1>
+          <p className="mt-1.5 text-slate-600 dark:text-slate-400">
             One-time purchase titles.
           </p>
         </div>
-        <Link href="/upload/single">
+        <Link href="/upload/single" className="shrink-0">
           <Button leftIcon={<UploadIcon />}>Add Movie</Button>
         </Link>
       </div>
@@ -54,7 +56,9 @@ export default function SingleMoviesPage() {
         showTypeFilter={false}
       />
 
-      <MovieList movies={movies} isLoading={isLoading} />
+      <div className="min-h-[320px]">
+        <MovieList movies={movies} isLoading={isLoading} />
+      </div>
     </div>
   );
 }

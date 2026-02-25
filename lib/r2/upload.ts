@@ -73,3 +73,21 @@ export async function uploadSubtitle(movieId: string, file: File, lang = "en"): 
   const contentType = ext === "vtt" ? "text/vtt" : "application/x-subrip";
   return uploadToR2(key, buffer, contentType);
 }
+
+export async function uploadEpisodeVideo(
+  movieId: string,
+  episodeNumber: number,
+  file: File
+): Promise<string> {
+  const mime = file.type;
+  if (!ALLOWED_VIDEO.some((t) => mime === t || mime.startsWith(t.split("/")[0] + "/"))) {
+    throw new Error(`Invalid video type. Allowed: ${ALLOWED_VIDEO.join(", ")}`);
+  }
+  if (file.size > MAX_FILE_SIZE) {
+    throw new Error(`Video too large. Max ${MAX_FILE_SIZE / 1024 / 1024}MB`);
+  }
+  const ext = getExtension(mime, "mp4");
+  const key = `movies/${movieId}/episodes/${episodeNumber}.${ext}`;
+  const buffer = Buffer.from(await file.arrayBuffer());
+  return uploadToR2(key, buffer, mime);
+}

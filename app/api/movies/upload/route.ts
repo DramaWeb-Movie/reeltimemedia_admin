@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { uploadVideo, uploadThumbnail, uploadSubtitle } from "@/lib/r2/upload";
+import { requireAuth } from "@/lib/auth/requireAuth";
 
 export async function POST(request: NextRequest) {
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const formData = await request.formData();
 

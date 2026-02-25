@@ -42,3 +42,18 @@ CREATE TABLE IF NOT EXISTS movies (
 
 CREATE INDEX IF NOT EXISTS idx_movies_status ON movies(status);
 CREATE INDEX IF NOT EXISTS idx_movies_created_at ON movies(created_at);
+
+-- Episodes for series (video per episode)
+CREATE TABLE IF NOT EXISTS series_episodes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  movie_id UUID NOT NULL REFERENCES movies(id) ON DELETE CASCADE,
+  episode_number INTEGER NOT NULL,
+  title VARCHAR(255) NOT NULL DEFAULT '',
+  duration INTEGER,
+  video_url TEXT,
+  is_free_preview BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(movie_id, episode_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_series_episodes_movie_id ON series_episodes(movie_id);

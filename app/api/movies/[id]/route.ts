@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { Movie } from "@/types";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAuth } from "@/lib/auth/requireAuth";
 
 function mapSupabaseRow(row: Record<string, unknown>): Movie {
   return {
@@ -30,6 +31,9 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { id } = await params;
     const supabase = createAdminClient();
@@ -45,5 +49,95 @@ export async function GET(
     return NextResponse.json({ movie: mapSupabaseRow(data) });
   } catch {
     return NextResponse.json({ error: "Failed to fetch movie" }, { status: 500 });
+  }
+}
+
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
+
+  try {
+    const { id } = await params;
+    const body = await request.json().catch(() => ({}));
+    const supabase = createAdminClient();
+
+    const allowed: Record<string, string> = {
+      title: "title",
+      description: "description",
+      genre: "genre",
+      release_date: "release_date",
+      duration: "duration",
+      status: "status",
+      price: "price",
+      trailer_url: "trailer_url",
+      cast: "cast",
+      free_episodes_count: "free_episodes_count",
+      total_episodes: "total_episodes",
+      subscription_plan_id: "subscription_plan_id",
+      thumbnail_url: "thumbnail_url",
+      video_url: "video_url",
+      subtitle_url: "subtitle_url",
+    };
+    const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    for (const [key, col] of Object.entries(allowed)) {
+      if (key in body) {
+        const v = body[key];
+        if (key === "duration" || key === "free_episodes_count" || key === "total_episodes") {
+          updates[col] = v === "" || v === null ? null : Number(v);
+        } else if (key === "price") {
+          updates[col] = v === "" || v === null ? null : Number(v);
+        } else {
+          updates[col] = v === "" ? null : v;
+        }
+      }
+    }
+
+    if (Object.keys(updates).length <= 1) {
+      return NextResponse.json({ error: "No fields to update" }, { status: 400 });
+    }
+
+    const { data, error } = await supabase
+      .from("movies")
+      .update(updates)
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) {
+      return NextResponse.json(
+        { error: error.message ?? "Failed to update movie" },
+        { status: 500 }
+      );
+    }
+    return NextResponse.json({ movie: mapSupabaseRow(data) });
+  } catch {
+    return NextResponse.json({ error: "Failed to update movie" }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
+
+  try {
+    const { id } = await params;
+    const supabase = createAdminClient();
+    const { error } = await supabase.from("movies").delete().eq("id", id);
+
+    if (error) {
+      return NextResponse.json(
+        { error: error.message ?? "Failed to delete movie" },
+        { status: 500 }
+      );
+    }
+    return NextResponse.json({ success: true });
+  } catch {
+    return NextResponse.json({ error: "Failed to delete movie" }, { status: 500 });
   }
 }

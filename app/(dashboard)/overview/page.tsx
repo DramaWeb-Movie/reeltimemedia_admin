@@ -49,15 +49,17 @@ export default function OverviewPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Overview</h1>
-        <p className="mt-1 text-slate-600 dark:text-slate-400">
+        <h1 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
+          Overview
+        </h1>
+        <p className="mt-1.5 text-slate-600 dark:text-slate-400">
           Welcome back. Here&apos;s what&apos;s happening with your platform.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <StatCard
           title="Total Users"
           value={stats?.totalUsers.toLocaleString() ?? "—"}

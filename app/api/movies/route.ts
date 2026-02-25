@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { Movie } from "@/types";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAuth } from "@/lib/auth/requireAuth";
 
 function mapSupabaseRow(row: Record<string, unknown>): Movie {
   return {
@@ -27,6 +28,9 @@ function mapSupabaseRow(row: Record<string, unknown>): Movie {
 }
 
 export async function GET(request: Request) {
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");

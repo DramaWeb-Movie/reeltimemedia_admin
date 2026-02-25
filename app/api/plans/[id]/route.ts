@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { SubscriptionPlan } from "@/types";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAuth } from "@/lib/auth/requireAuth";
 
 function mapRow(row: Record<string, unknown>): SubscriptionPlan {
   return {
@@ -19,6 +20,9 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { id } = await params;
     const body = await request.json();

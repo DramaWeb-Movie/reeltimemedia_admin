@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { SubscriptionPlan } from "@/types";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAuth } from "@/lib/auth/requireAuth";
 
 function mapRow(row: Record<string, unknown>): SubscriptionPlan {
   return {
@@ -16,6 +17,9 @@ function mapRow(row: Record<string, unknown>): SubscriptionPlan {
 }
 
 export async function GET() {
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const supabase = createAdminClient();
     const { data, error } = await supabase
@@ -40,6 +44,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const body = await request.json();
     const name = body.name?.trim();

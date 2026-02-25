@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { PaymentStats } from "@/types";
+import { requireAuth } from "@/lib/auth/requireAuth";
 
 const EMPTY_STATS: PaymentStats = {
   totalRevenue: 0,
@@ -9,6 +10,9 @@ const EMPTY_STATS: PaymentStats = {
 };
 
 export async function GET() {
+  const auth = await requireAuth();
+  if (auth instanceof NextResponse) return auth;
+
   try {
     return NextResponse.json({ stats: EMPTY_STATS });
   } catch {

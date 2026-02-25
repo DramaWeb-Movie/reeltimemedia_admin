@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -35,6 +35,9 @@ export default function SeriesUploadPage() {
   const [duration, setDuration] = useState("");
   const [status, setStatus] = useState<"draft" | "published">("draft");
   const [cast, setCast] = useState("");
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
+  const [isDraggingThumbnail, setIsDraggingThumbnail] = useState(false);
+  const thumbnailRef = useRef<HTMLInputElement>(null);
 
   // Step 3: Episodes
   const [episodes, setEpisodes] = useState<EpisodeInput[]>([]);
@@ -72,7 +75,7 @@ export default function SeriesUploadPage() {
 
   const canProceed = () => {
     if (step === 1) return true;
-    if (step === 2) return !!title.trim();
+    if (step === 2) return !!title.trim() && !!thumbnailFile;
     if (step === 3) return episodes.length > 0;
     return true;
   };
@@ -91,10 +94,58 @@ export default function SeriesUploadPage() {
       handleNext();
       return;
     }
+    if (!thumbnailFile) {
+      toastError("Cover image is required.");
+      return;
+    }
+    const missingVideo = episodes.find((ep) => !ep.videoFile);
+    if (missingVideo) {
+      toastError(`Episode ${missingVideo.episodeNumber} needs a video file.`);
+      return;
+    }
     setIsUploading(true);
     try {
-      await new Promise((r) => setTimeout(r, 1500));
+      const freeEpisodesCount =
+        seriesAccess === "membership"
+          ? episodes.filter((ep) => ep.isFreePreview).length
+          : 0;
+      const formData = new FormData();
+      formData.set("title", title.trim());
+      formData.set("description", description.trim());
+      formData.set("genre", genre);
+      formData.set("cast", cast.trim());
+      formData.set("releaseDate", releaseDate);
+      formData.set("duration", duration);
+      formData.set("status", status);
+      formData.set("freeEpisodesCount", String(freeEpisodesCount));
+      formData.set("totalEpisodes", String(episodes.length));
+      formData.set("subscriptionPlanId", "");
+      formData.set("thumbnail", thumbnailFile);
+      formData.set(
+        "episodes",
+        JSON.stringify(
+          episodes.map((ep) => ({
+            episodeNumber: ep.episodeNumber,
+            title: ep.title,
+            duration: ep.duration,
+            isFreePreview: ep.isFreePreview,
+          }))
+        )
+      );
+      episodes.forEach((ep, i) => {
+        if (ep.videoFile) formData.append(`episode_${i}`, ep.videoFile);
+      });
+      const res = await fetch("/api/movies/upload/series", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toastError(data.error ?? "Failed to upload series. Please try again.");
+        return;
+      }
       toastSuccess("Series uploaded successfully");
+      window.location.href = "/movies/series";
     } catch {
       toastError("Failed to upload series. Please try again.");
     } finally {
@@ -161,8 +212,8 @@ export default function SeriesUploadPage() {
                     : "border-slate-300 dark:border-slate-700 hover:border-slate-400 text-slate-600 dark:text-slate-400"
                 }`}
               >
-                <span className="font-semibold block">Membership</span>
-                <span className="text-sm mt-1 block">Subscription required. You&apos;ll mark which episodes are free to preview in Step 3.</span>
+                <span className="font-semibold block">Subscribers only</span>
+                <span className="text-sm mt-1 block">Only users with an active subscription (any plan) can watch. Mark which episodes are free to preview in Step 3.</span>
               </button>
               <button
                 type="button"
@@ -173,8 +224,8 @@ export default function SeriesUploadPage() {
                     : "border-slate-300 dark:border-slate-700 hover:border-slate-400 text-slate-600 dark:text-slate-400"
                 }`}
               >
-                <span className="font-semibold block">Free</span>
-                <span className="text-sm mt-1 block">All episodes free to watch. No subscription needed.</span>
+                <span className="font-semibold block">Free for all</span>
+                <span className="text-sm mt-1 block">No subscription needed. Everyone can watch all episodes.</span>
               </button>
             </div>
           </Card>
@@ -186,6 +237,41 @@ export default function SeriesUploadPage() {
             <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-4">Step 2: Series Details</h3>
             <div className="space-y-4">
               <Input label="Title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Series title" required />
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Cover image</label>
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setIsDraggingThumbnail(true); }}
+                  onDragLeave={() => setIsDraggingThumbnail(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDraggingThumbnail(false);
+                    const f = e.dataTransfer.files[0];
+                    if (f?.type.startsWith("image/")) setThumbnailFile(f);
+                  }}
+                  onClick={() => thumbnailRef.current?.click()}
+                  className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+                    thumbnailFile ? "border-emerald-500/50 bg-emerald-500/10" : isDraggingThumbnail ? "border-red-500 bg-red-500/10" : "border-slate-300 dark:border-slate-700 hover:border-slate-400"
+                  }`}
+                >
+                  <input
+                    ref={thumbnailRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={(e) => setThumbnailFile(e.target.files?.[0] ?? null)}
+                  />
+                  {thumbnailFile ? (
+                    <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">{thumbnailFile.name}</p>
+                  ) : (
+                    <>
+                      <svg className="w-10 h-10 mx-auto text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Drop cover image or click (JPG, PNG, WebP)</p>
+                    </>
+                  )}
+                </div>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Description</label>
                 <textarea
@@ -288,9 +374,21 @@ export default function SeriesUploadPage() {
           <Card>
             <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-4">Step 4: Review</h3>
             <div className="space-y-6">
+              {thumbnailFile && (
+                <div>
+                  <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Cover image</p>
+                  <div className="w-24 aspect-[2/3] rounded-lg bg-slate-100 dark:bg-slate-800 overflow-hidden border border-slate-200 dark:border-slate-700">
+                    <img
+                      src={URL.createObjectURL(thumbnailFile)}
+                      alt="Cover"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                </div>
+              )}
               <div>
                 <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Access</p>
-                <p className="font-medium text-slate-900 dark:text-white">{seriesAccess === "membership" ? "Membership required" : "Free"}</p>
+                <p className="font-medium text-slate-900 dark:text-white">{seriesAccess === "membership" ? "Subscribers only" : "Free for all"}</p>
               </div>
               <div>
                 <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Series</p>
