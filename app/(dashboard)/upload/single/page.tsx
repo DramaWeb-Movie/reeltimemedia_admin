@@ -58,6 +58,50 @@ export default function SingleMovieUploadPage() {
     if (step > 1) setStep(step - 1);
   };
 
+  // Server-side upload fallback (for when CORS isn't configured on R2)
+  const uploadViaServer = async () => {
+    const formData = new FormData();
+    formData.set("title", title.trim());
+    formData.set("description", description);
+    formData.set("genre", genre);
+    formData.set("cast", cast);
+    formData.set("price", price);
+    formData.set("releaseDate", releaseDate);
+    formData.set("duration", duration);
+    formData.set("status", status);
+    formData.set("trailerUrl", trailerUrl);
+    formData.set("video", singleVideoFile!);
+    formData.set("thumbnail", thumbnailFile!);
+    if (subtitleFile) formData.set("subtitle", subtitleFile);
+
+    return new Promise<{ success?: boolean; error?: string }>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/api/movies/upload");
+
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e.lengthComputable && e.total > 0) {
+          const pct = Math.min(99, Math.round((e.loaded / e.total) * 100));
+          setUploadProgress(pct);
+        }
+      });
+
+      xhr.addEventListener("load", () => {
+        setUploadProgress(100);
+        try {
+          const json = JSON.parse(xhr.responseText);
+          resolve(json);
+        } catch {
+          resolve({ error: "Invalid response" });
+        }
+      });
+
+      xhr.addEventListener("error", () => reject(new Error("Upload failed")));
+      xhr.addEventListener("abort", () => reject(new Error("Upload cancelled")));
+
+      xhr.send(formData);
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (step < 4) {
@@ -70,63 +114,160 @@ export default function SingleMovieUploadPage() {
     }
     setIsUploading(true);
     setUploadProgress(0);
+    
+    // For small files (< 50MB), use server upload directly (avoids CORS issues)
+    const SMALL_FILE_THRESHOLD = 50 * 1024 * 1024; // 50MB
+    const useServerUpload = singleVideoFile.size < SMALL_FILE_THRESHOLD;
+    
+    if (useServerUpload) {
+      console.log("Using server-side upload for small file");
+      try {
+        const data = await uploadViaServer();
+        if (!data.success) {
+          toastError(data.error ?? "Failed to upload movie. Please try again.");
+          return;
+        }
+        toastSuccess("Movie uploaded successfully");
+        window.location.href = "/movies/single";
+      } catch {
+        toastError("Failed to upload movie. Please try again.");
+      } finally {
+        setIsUploading(false);
+        setUploadProgress(0);
+      }
+      return;
+    }
+    
+    // For large files, try presigned URLs (direct to R2)
     try {
-      const formData = new FormData();
-      formData.set("title", title.trim());
-      formData.set("description", description);
-      formData.set("genre", genre);
-      formData.set("cast", cast);
-      formData.set("price", price);
-      formData.set("releaseDate", releaseDate);
-      formData.set("duration", duration);
-      formData.set("status", status);
-      formData.set("trailerUrl", trailerUrl);
-      formData.set("video", singleVideoFile);
-      formData.set("thumbnail", thumbnailFile);
-      if (subtitleFile) formData.set("subtitle", subtitleFile);
+      // Step 1: Get presigned URLs from server
+      console.log("Getting presigned URLs...");
+      const presignRes = await fetch("/api/movies/presign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: title.trim(),
+          description,
+          genre,
+          cast,
+          price: price ? parseFloat(price) : null,
+          releaseDate,
+          duration: duration ? parseInt(duration) : null,
+          status,
+          trailerUrl,
+          videoType: singleVideoFile.type,
+          thumbnailType: thumbnailFile.type,
+          subtitleFileName: subtitleFile?.name,
+        }),
+      });
 
-      const data = await new Promise<{ success?: boolean; error?: string }>((resolve, reject) => {
+      const presignData = await presignRes.json();
+      if (!presignRes.ok || !presignData.success) {
+        throw new Error(presignData.error ?? "Failed to prepare upload");
+      }
+
+      const { movieId, uploadUrls } = presignData;
+      console.log("Got presigned URLs for movie:", movieId);
+
+      // Step 2: Upload files directly to R2 using presigned URLs
+      const totalSize = singleVideoFile.size + thumbnailFile.size + (subtitleFile?.size ?? 0);
+      let uploadedBytes = 0;
+
+      // Upload video (largest file, track progress)
+      console.log("Uploading video to R2...");
+      await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        xhr.open("POST", "/api/movies/upload");
+        xhr.open("PUT", uploadUrls.video.uploadUrl);
+        xhr.setRequestHeader("Content-Type", singleVideoFile.type);
 
         xhr.upload.addEventListener("progress", (e) => {
-          if (e.lengthComputable && e.total > 0) {
-            // Use browser's calculated total when available
-            const pct = Math.min(99, Math.round((e.loaded / e.total) * 100));
+          if (e.lengthComputable) {
+            uploadedBytes = e.loaded;
+            const pct = Math.min(90, Math.round((uploadedBytes / totalSize) * 100));
             setUploadProgress(pct);
-            console.log(`Upload progress: ${e.loaded} / ${e.total} bytes (${pct}%)`);
-          } else {
-            // Fallback: calculate based on video file size (main upload)
-            const pct = Math.min(99, Math.round((e.loaded / singleVideoFile.size) * 100));
-            setUploadProgress(pct);
-            console.log(`Upload progress (estimated): ${e.loaded} bytes (${pct}%)`);
           }
         });
 
         xhr.addEventListener("load", () => {
-          setUploadProgress(100);
-          try {
-            const json = JSON.parse(xhr.responseText);
-            resolve(json);
-          } catch {
-            resolve({ error: "Invalid response" });
+          if (xhr.status >= 200 && xhr.status < 300) {
+            console.log("Video uploaded successfully");
+            resolve();
+          } else {
+            console.error(`Video upload HTTP error: ${xhr.status} ${xhr.statusText}`, xhr.responseText);
+            reject(new Error(`Video upload failed: ${xhr.status} ${xhr.statusText}`));
           }
         });
 
-        xhr.addEventListener("error", () => reject(new Error("Upload failed")));
-        xhr.addEventListener("abort", () => reject(new Error("Upload cancelled")));
+        xhr.addEventListener("error", (e) => {
+          console.error("Video upload network error:", e);
+          console.error("This is likely a CORS issue. Ensure your R2 bucket has CORS configured.");
+          reject(new Error("CORS_ERROR"));
+        });
+        xhr.addEventListener("abort", () => reject(new Error("Video upload cancelled")));
 
-        xhr.send(formData);
+        xhr.send(singleVideoFile);
       });
 
-      if (!data.success) {
-        toastError(data.error ?? "Failed to upload movie. Please try again.");
-        return;
+      // Upload thumbnail
+      console.log("Uploading thumbnail to R2...");
+      const thumbRes = await fetch(uploadUrls.thumbnail.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": thumbnailFile.type },
+        body: thumbnailFile,
+      });
+      if (!thumbRes.ok) {
+        throw new Error("Thumbnail upload failed");
       }
+      setUploadProgress(95);
+
+      // Upload subtitle if present
+      let subtitleUrl: string | null = null;
+      if (subtitleFile && uploadUrls.subtitle) {
+        console.log("Uploading subtitle to R2...");
+        const subRes = await fetch(uploadUrls.subtitle.uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": subtitleFile.type || "text/plain" },
+          body: subtitleFile,
+        });
+        if (!subRes.ok) {
+          console.warn("Subtitle upload failed, continuing without subtitle");
+        } else {
+          subtitleUrl = uploadUrls.subtitle.publicUrl;
+        }
+      }
+      setUploadProgress(98);
+
+      // Step 3: Confirm upload and save URLs to database
+      console.log("Confirming upload...");
+      const confirmRes = await fetch("/api/movies/confirm-upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          movieId,
+          videoUrl: uploadUrls.video.publicUrl,
+          thumbnailUrl: uploadUrls.thumbnail.publicUrl,
+          subtitleUrl,
+        }),
+      });
+
+      const confirmData = await confirmRes.json();
+      if (!confirmRes.ok || !confirmData.success) {
+        throw new Error(confirmData.error ?? "Failed to confirm upload");
+      }
+
+      setUploadProgress(100);
       toastSuccess("Movie uploaded successfully");
       window.location.href = "/movies/single";
-    } catch {
-      toastError("Failed to upload movie. Please try again.");
+    } catch (err) {
+      console.error("Upload error:", err);
+      
+      // Check if it's a CORS error and provide helpful message
+      const errorMessage = err instanceof Error ? err.message : "";
+      if (errorMessage === "CORS_ERROR" || errorMessage.includes("CORS")) {
+        toastError("Upload failed: CORS not configured on R2. Configure CORS in Cloudflare R2 dashboard, or use files under 50MB.");
+      } else {
+        toastError(err instanceof Error ? err.message : "Failed to upload movie. Please try again.");
+      }
     } finally {
       setIsUploading(false);
       setUploadProgress(0);

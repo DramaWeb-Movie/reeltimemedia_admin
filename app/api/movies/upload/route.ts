@@ -3,12 +3,30 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { uploadVideo, uploadThumbnail, uploadSubtitle } from "@/lib/r2/upload";
 import { requireAuth } from "@/lib/auth/requireAuth";
 
+// Route segment config to allow large file uploads (up to 5GB)
+export const runtime = "nodejs";
+export const maxDuration = 300; // 5 minutes timeout for large uploads
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+
 export async function POST(request: NextRequest) {
   const auth = await requireAuth();
   if (auth instanceof NextResponse) return auth;
 
   try {
+    // Validate Content-Type before parsing
+    const contentType = request.headers.get("content-type") || "";
+    if (!contentType.includes("multipart/form-data")) {
+      console.error("Invalid Content-Type:", contentType);
+      return NextResponse.json(
+        { error: "Content-Type must be multipart/form-data" },
+        { status: 400 }
+      );
+    }
+
+    console.log("Parsing FormData, Content-Type:", contentType);
     const formData = await request.formData();
+    console.log("FormData parsed successfully");
 
     const title = formData.get("title") as string;
     const description = (formData.get("description") as string) || null;
@@ -101,7 +119,23 @@ export async function POST(request: NextRequest) {
     });
   } catch (err) {
     console.error("Upload error:", err);
-    const message = err instanceof Error ? err.message : "Upload failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    
+    // Provide more specific error messages
+    let message = "Upload failed";
+    let status = 500;
+    
+    if (err instanceof Error) {
+      if (err.message.includes("parse") && err.message.includes("FormData")) {
+        message = "Failed to parse upload data. The file may be too large or the upload was interrupted.";
+        status = 413;
+      } else if (err.message.includes("Content-Type")) {
+        message = err.message;
+        status = 400;
+      } else {
+        message = err.message;
+      }
+    }
+    
+    return NextResponse.json({ error: message }, { status });
   }
 }

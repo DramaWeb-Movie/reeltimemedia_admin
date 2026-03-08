@@ -3,10 +3,11 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   experimental: {
     serverActions: {
-      bodySizeLimit: "55mb",
+      bodySizeLimit: "5gb",
     },
-    proxyClientMaxBodySize: "55mb",
   },
+  // Configure body size limit for API routes (uploads)
+  serverExternalPackages: [],
 };
 
 export default nextConfig;

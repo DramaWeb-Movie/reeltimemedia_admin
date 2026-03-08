@@ -27,7 +27,12 @@ export async function PATCH(
       const d = formData.get("duration");
       duration = d !== null && d !== undefined && d !== "" ? Number(d) : null;
       const f = formData.get("is_free_preview");
-      is_free_preview = f === "true" || f === true;
+      if (f !== null && f !== undefined && f !== "") {
+        const value = String(f).toLowerCase();
+        is_free_preview = value === "true" || value === "1" || value === "on";
+      } else {
+        is_free_preview = null;
+      }
       videoFile = formData.get("video") as File | null;
       if (videoFile?.size === 0) videoFile = null;
     } else {

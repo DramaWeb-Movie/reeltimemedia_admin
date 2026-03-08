@@ -3,6 +3,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { uploadThumbnail, uploadEpisodeVideo } from "@/lib/r2/upload";
 import { requireAuth } from "@/lib/auth/requireAuth";
 
+// Route segment config to allow large file uploads (up to 5GB per episode)
+export const runtime = "nodejs";
+export const maxDuration = 600; // 10 minutes timeout for series with multiple episodes
+
 interface EpisodeMeta {
   episodeNumber: number;
   title: string;
