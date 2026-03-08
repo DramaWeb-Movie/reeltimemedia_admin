@@ -5,7 +5,7 @@ import { requireAuth } from "@/lib/auth/requireAuth";
 
 // Route segment config to allow large file uploads (up to 5GB per episode)
 export const runtime = "nodejs";
-export const maxDuration = 600; // 10 minutes timeout for series with multiple episodes
+export const maxDuration = 300; // 5 min max on Hobby plan; series uploads should complete within this
 
 interface EpisodeMeta {
   episodeNumber: number;
