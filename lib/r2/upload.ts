@@ -6,29 +6,20 @@ import {
   AbortMultipartUploadCommand,
 } from "@aws-sdk/client-s3";
 import { getR2Config } from "./client";
+import {
+  getExtension,
+  ALLOWED_VIDEO_TYPES,
+  ALLOWED_IMAGE_TYPES,
+  MAX_VIDEO_BYTES,
+  MAX_IMAGE_BYTES,
+} from "./mime";
+import { createLogger } from "@/lib/logger";
 
-// 5GB max for videos (adjust as needed)
-const MAX_VIDEO_SIZE = Number(process.env.MAX_VIDEO_SIZE ?? 5_368_709_120); // 5GB default
-const MAX_IMAGE_SIZE = Number(process.env.MAX_IMAGE_SIZE ?? 10_485_760); // 10MB default
+const log = createLogger("r2:upload");
 
 // Multipart upload settings
 const PART_SIZE = 100 * 1024 * 1024; // 100MB per part (recommended for large files)
 const MULTIPART_THRESHOLD = 100 * 1024 * 1024; // Use multipart for files > 100MB
-
-const ALLOWED_VIDEO = (process.env.ALLOWED_VIDEO_TYPES ?? "video/mp4,video/webm,video/quicktime").split(",").map((t) => t.trim());
-const ALLOWED_IMAGE = (process.env.ALLOWED_IMAGE_TYPES ?? "image/jpeg,image/png,image/webp").split(",").map((t) => t.trim());
-
-function getExtension(mime: string, fallback: string): string {
-  const map: Record<string, string> = {
-    "video/mp4": "mp4",
-    "video/webm": "webm",
-    "video/quicktime": "mov",
-    "image/jpeg": "jpg",
-    "image/png": "png",
-    "image/webp": "webp",
-  };
-  return map[mime] ?? fallback;
-}
 
 /**
  * Upload a small file directly to R2 (< 100MB)
@@ -84,7 +75,7 @@ export async function uploadLargeFileToR2(
   const parts: { ETag: string; PartNumber: number }[] = [];
   const totalParts = Math.ceil(file.size / PART_SIZE);
 
-  console.log(`Starting multipart upload: ${file.size} bytes, ${totalParts} parts`);
+  log.info("Starting multipart upload", { size: file.size, parts: totalParts });
 
   try {
     for (let partNumber = 1; partNumber <= totalParts; partNumber++) {
@@ -95,7 +86,7 @@ export async function uploadLargeFileToR2(
       const chunk = file.slice(start, end);
       const buffer = Buffer.from(await chunk.arrayBuffer());
 
-      console.log(`Uploading part ${partNumber}/${totalParts} (${buffer.length} bytes)`);
+      log.debug(`Uploading part`, { part: partNumber, of: totalParts, bytes: buffer.length });
 
       const uploadPartResponse = await client.send(
         new UploadPartCommand({
@@ -129,7 +120,7 @@ export async function uploadLargeFileToR2(
       })
     );
 
-    console.log(`Multipart upload completed: ${key}`);
+    log.info("Multipart upload completed", { key });
 
     if (publicUrl) {
       const base = publicUrl.replace(/\/$/, "");
@@ -138,7 +129,7 @@ export async function uploadLargeFileToR2(
     return key;
   } catch (error) {
     // Abort multipart upload on failure
-    console.error("Multipart upload failed, aborting...", error);
+    log.error("Multipart upload failed, aborting", error);
     try {
       await client.send(
         new AbortMultipartUploadCommand({
@@ -148,7 +139,7 @@ export async function uploadLargeFileToR2(
         })
       );
     } catch (abortError) {
-      console.error("Failed to abort multipart upload:", abortError);
+      log.error("Failed to abort multipart upload", abortError);
     }
     throw error;
   }
@@ -156,11 +147,11 @@ export async function uploadLargeFileToR2(
 
 export async function uploadVideo(movieId: string, file: File): Promise<string> {
   const mime = file.type;
-  if (!ALLOWED_VIDEO.some((t) => mime === t || mime.startsWith(t.split("/")[0] + "/"))) {
-    throw new Error(`Invalid video type. Allowed: ${ALLOWED_VIDEO.join(", ")}`);
+  if (!ALLOWED_VIDEO_TYPES.includes(mime)) {
+    throw new Error(`Invalid video type. Allowed: ${ALLOWED_VIDEO_TYPES.join(", ")}`);
   }
-  if (file.size > MAX_VIDEO_SIZE) {
-    throw new Error(`Video too large. Max ${MAX_VIDEO_SIZE / 1024 / 1024 / 1024}GB`);
+  if (file.size > MAX_VIDEO_BYTES) {
+    throw new Error(`Video too large. Max ${MAX_VIDEO_BYTES / 1024 / 1024 / 1024}GB`);
   }
   
   const ext = getExtension(mime, "mp4");
@@ -168,7 +159,7 @@ export async function uploadVideo(movieId: string, file: File): Promise<string> 
 
   // Use multipart upload for large files
   if (file.size > MULTIPART_THRESHOLD) {
-    console.log(`Using multipart upload for ${file.size} bytes video`);
+    log.info("Using multipart upload for video", { size: file.size });
     return uploadLargeFileToR2(key, file, mime);
   }
 
@@ -179,8 +170,11 @@ export async function uploadVideo(movieId: string, file: File): Promise<string> 
 
 export async function uploadThumbnail(movieId: string, file: File): Promise<string> {
   const mime = file.type;
-  if (!ALLOWED_IMAGE.some((t) => mime === t || mime.startsWith(t.split("/")[0] + "/"))) {
-    throw new Error(`Invalid image type. Allowed: ${ALLOWED_IMAGE.join(", ")}`);
+  if (!ALLOWED_IMAGE_TYPES.includes(mime)) {
+    throw new Error(`Invalid image type. Allowed: ${ALLOWED_IMAGE_TYPES.join(", ")}`);
+  }
+  if (file.size > MAX_IMAGE_BYTES) {
+    throw new Error(`Thumbnail too large. Max ${MAX_IMAGE_BYTES / 1024 / 1024}MB`);
   }
   const ext = getExtension(mime, "jpg");
   const key = `movies/${movieId}/thumbnail.${ext}`;
@@ -203,19 +197,19 @@ export async function uploadEpisodeVideo(
   file: File
 ): Promise<string> {
   const mime = file.type;
-  if (!ALLOWED_VIDEO.some((t) => mime === t || mime.startsWith(t.split("/")[0] + "/"))) {
-    throw new Error(`Invalid video type. Allowed: ${ALLOWED_VIDEO.join(", ")}`);
+  if (!ALLOWED_VIDEO_TYPES.includes(mime)) {
+    throw new Error(`Invalid video type. Allowed: ${ALLOWED_VIDEO_TYPES.join(", ")}`);
   }
-  if (file.size > MAX_VIDEO_SIZE) {
-    throw new Error(`Video too large. Max ${MAX_VIDEO_SIZE / 1024 / 1024 / 1024}GB`);
+  if (file.size > MAX_VIDEO_BYTES) {
+    throw new Error(`Video too large. Max ${MAX_VIDEO_BYTES / 1024 / 1024 / 1024}GB`);
   }
-  
+
   const ext = getExtension(mime, "mp4");
   const key = `movies/${movieId}/episodes/${episodeNumber}.${ext}`;
 
   // Use multipart upload for large files
   if (file.size > MULTIPART_THRESHOLD) {
-    console.log(`Using multipart upload for episode ${episodeNumber}: ${file.size} bytes`);
+    log.info("Using multipart upload for episode", { episode: episodeNumber, size: file.size });
     return uploadLargeFileToR2(key, file, mime);
   }
 

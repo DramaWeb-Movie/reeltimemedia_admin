@@ -1,6 +1,7 @@
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { getR2Config } from "./client";
+import { getExtension } from "./mime";
 
 const PRESIGNED_URL_EXPIRY = 3600; // 1 hour
 
@@ -77,14 +78,3 @@ export async function generateMovieUploadUrls(
   return { video, thumbnail, subtitle };
 }
 
-function getExtension(mime: string, fallback: string): string {
-  const map: Record<string, string> = {
-    "video/mp4": "mp4",
-    "video/webm": "webm",
-    "video/quicktime": "mov",
-    "image/jpeg": "jpg",
-    "image/png": "png",
-    "image/webp": "webp",
-  };
-  return map[mime] ?? fallback;
-}

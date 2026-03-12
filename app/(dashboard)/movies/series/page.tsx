@@ -18,7 +18,7 @@ function UploadIcon() {
 export default function SeriesMoviesPage() {
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
-  const { movies, isLoading } = useMovies({
+  const { movies, isLoading, removeById } = useMovies({
     type: "series",
     status: status || undefined,
     search: search || undefined,
@@ -57,7 +57,7 @@ export default function SeriesMoviesPage() {
       />
 
       <div className="min-h-[320px]">
-        <MovieList movies={movies} isLoading={isLoading} />
+        <MovieList movies={movies} isLoading={isLoading} onDelete={removeById} variant="series" />
       </div>
     </div>
   );

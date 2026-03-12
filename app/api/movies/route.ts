@@ -7,6 +7,7 @@ function mapSupabaseRow(row: Record<string, unknown>): Movie {
   return {
     id: String(row.id),
     title: String(row.title),
+    title_kh: (row.title_kh as string) ?? null,
     description: (row.description as string) ?? null,
     genre: (row.genre as string) ?? null,
     release_date: row.release_date ? String(row.release_date).slice(0, 10) : null,

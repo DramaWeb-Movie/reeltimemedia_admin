@@ -38,5 +38,8 @@ export function useMovies(filters: UseMoviesFilters = {}) {
     load();
   }, [status, type, search]);
 
-  return { movies, isLoading };
+  const removeById = (id: string) =>
+    setMovies((prev) => prev.filter((m) => m.id !== id));
+
+  return { movies, isLoading, removeById };
 }

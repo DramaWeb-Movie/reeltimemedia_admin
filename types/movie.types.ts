@@ -5,6 +5,7 @@ export type MovieType = "series" | "single";
 export interface Movie {
   id: string;
   title: string;
+  title_kh: string | null;
   description: string | null;
   genre: string | null;
   release_date: string | null;
@@ -47,6 +48,7 @@ export interface EpisodeInput {
 
 export interface MovieFormData {
   title: string;
+  title_kh: string;
   description: string;
   genre: string;
   release_date: string;

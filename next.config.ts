@@ -6,7 +6,6 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "5gb",
     },
   },
-  // Configure body size limit for API routes (uploads)
   serverExternalPackages: [],
 };
 

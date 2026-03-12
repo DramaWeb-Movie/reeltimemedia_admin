@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -9,6 +10,17 @@ import { CastInput } from "@/components/ui/CastInput";
 import { Select } from "@/components/ui/Select";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { GENRE_OPTIONS } from "@/lib/constants/genres";
+import {
+  uploadFileInParallel,
+  formatBytes,
+  formatSpeed,
+  formatTime,
+  type UploadProgress,
+} from "@/lib/upload/parallel-uploader";
+import { createLogger } from "@/lib/logger";
+import { MAX_VIDEO_BYTES, MAX_IMAGE_BYTES } from "@/lib/r2/mime";
+
+const log = createLogger("upload:single");
 
 const STEPS = [
   { id: 1, title: "Info", description: "Title, cast" },
@@ -18,12 +30,18 @@ const STEPS = [
 ] as const;
 
 export default function SingleMovieUploadPage() {
+  const router = useRouter();
   const [step, setStep] = useState(1);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStats, setUploadStats] = useState<UploadProgress | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  // Tracks active upload metadata so the catch block can clean up R2 + DB on any failure
+  const uploadMetaRef = useRef<{ movieId: string; uploadId: string; key: string } | null>(null);
 
   // Step 1: Basic info + cast
   const [title, setTitle] = useState("");
+  const [titleKh, setTitleKh] = useState("");
   const [description, setDescription] = useState("");
   const [genre, setGenre] = useState("");
   const [cast, setCast] = useState("");
@@ -42,7 +60,6 @@ export default function SingleMovieUploadPage() {
   const [duration, setDuration] = useState("");
   const [status, setStatus] = useState<"draft" | "published">("draft");
   const [trailerUrl, setTrailerUrl] = useState("");
-  const [subtitleFile, setSubtitleFile] = useState<File | null>(null);
 
   const canProceed = () => {
     if (step === 1) return !!title.trim();
@@ -58,50 +75,6 @@ export default function SingleMovieUploadPage() {
     if (step > 1) setStep(step - 1);
   };
 
-  // Server-side upload fallback (for when CORS isn't configured on R2)
-  const uploadViaServer = async () => {
-    const formData = new FormData();
-    formData.set("title", title.trim());
-    formData.set("description", description);
-    formData.set("genre", genre);
-    formData.set("cast", cast);
-    formData.set("price", price);
-    formData.set("releaseDate", releaseDate);
-    formData.set("duration", duration);
-    formData.set("status", status);
-    formData.set("trailerUrl", trailerUrl);
-    formData.set("video", singleVideoFile!);
-    formData.set("thumbnail", thumbnailFile!);
-    if (subtitleFile) formData.set("subtitle", subtitleFile);
-
-    return new Promise<{ success?: boolean; error?: string }>((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open("POST", "/api/movies/upload");
-
-      xhr.upload.addEventListener("progress", (e) => {
-        if (e.lengthComputable && e.total > 0) {
-          const pct = Math.min(99, Math.round((e.loaded / e.total) * 100));
-          setUploadProgress(pct);
-        }
-      });
-
-      xhr.addEventListener("load", () => {
-        setUploadProgress(100);
-        try {
-          const json = JSON.parse(xhr.responseText);
-          resolve(json);
-        } catch {
-          resolve({ error: "Invalid response" });
-        }
-      });
-
-      xhr.addEventListener("error", () => reject(new Error("Upload failed")));
-      xhr.addEventListener("abort", () => reject(new Error("Upload cancelled")));
-
-      xhr.send(formData);
-    });
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (step < 4) {
@@ -112,165 +85,154 @@ export default function SingleMovieUploadPage() {
       toastError("Video and thumbnail are required");
       return;
     }
-    setIsUploading(true);
-    setUploadProgress(0);
-    
-    // For small files (< 50MB), use server upload directly (avoids CORS issues)
-    const SMALL_FILE_THRESHOLD = 50 * 1024 * 1024; // 50MB
-    const useServerUpload = singleVideoFile.size < SMALL_FILE_THRESHOLD;
-    
-    if (useServerUpload) {
-      console.log("Using server-side upload for small file");
-      try {
-        const data = await uploadViaServer();
-        if (!data.success) {
-          toastError(data.error ?? "Failed to upload movie. Please try again.");
-          return;
-        }
-        toastSuccess("Movie uploaded successfully");
-        window.location.href = "/movies/single";
-      } catch {
-        toastError("Failed to upload movie. Please try again.");
-      } finally {
-        setIsUploading(false);
-        setUploadProgress(0);
-      }
+    if (singleVideoFile.size > MAX_VIDEO_BYTES) {
+      toastError(`Video is too large. Maximum size is ${MAX_VIDEO_BYTES / 1024 / 1024 / 1024}GB`);
       return;
     }
-    
-    // For large files, try presigned URLs (direct to R2)
+    if (thumbnailFile.size > MAX_IMAGE_BYTES) {
+      toastError(`Thumbnail is too large. Maximum size is ${MAX_IMAGE_BYTES / 1024 / 1024}MB`);
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadProgress(0);
+    setUploadStats(null);
+    abortControllerRef.current = new AbortController();
+
     try {
-      // Step 1: Get presigned URLs from server
-      console.log("Getting presigned URLs...");
-      const presignRes = await fetch("/api/movies/presign", {
+      // Step 1: Initialize multipart upload (get presigned URLs for all chunks)
+      log.info(`Initializing parallel upload`, { size: formatBytes(singleVideoFile.size) });
+      const initRes = await fetch("/api/movies/multipart-init", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: title.trim(),
+          title_kh: titleKh.trim() || null,
           description,
           genre,
           cast,
           price: price ? parseFloat(price) : null,
           releaseDate,
-          duration: duration ? parseInt(duration) : null,
-          status,
+          duration: duration ? parseInt(duration, 10) : null,
+          finalStatus: status,
           trailerUrl,
           videoType: singleVideoFile.type,
+          videoSize: singleVideoFile.size,
           thumbnailType: thumbnailFile.type,
-          subtitleFileName: subtitleFile?.name,
+          thumbnailSize: thumbnailFile.size,
         }),
       });
 
-      const presignData = await presignRes.json();
-      if (!presignRes.ok || !presignData.success) {
-        throw new Error(presignData.error ?? "Failed to prepare upload");
+      const initData = await initRes.json();
+      if (!initRes.ok || !initData.success) {
+        throw new Error(initData.error ?? "Failed to initialize upload");
       }
 
-      const { movieId, uploadUrls } = presignData;
-      console.log("Got presigned URLs for movie:", movieId);
+      const { movieId, video, thumbnail, finalStatus: confirmedStatus } = initData;
+      log.info("Upload initialized", { movieId, chunks: video.totalParts });
 
-      // Step 2: Upload files directly to R2 using presigned URLs
-      const totalSize = singleVideoFile.size + thumbnailFile.size + (subtitleFile?.size ?? 0);
-      let uploadedBytes = 0;
+      // Store so the catch block can abort R2 + delete DB record if anything fails
+      uploadMetaRef.current = { movieId, uploadId: video.uploadId, key: video.key };
 
-      // Upload video (largest file, track progress)
-      console.log("Uploading video to R2...");
-      await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open("PUT", uploadUrls.video.uploadUrl);
-        xhr.setRequestHeader("Content-Type", singleVideoFile.type);
-
-        xhr.upload.addEventListener("progress", (e) => {
-          if (e.lengthComputable) {
-            uploadedBytes = e.loaded;
-            const pct = Math.min(90, Math.round((uploadedBytes / totalSize) * 100));
-            setUploadProgress(pct);
-          }
-        });
-
-        xhr.addEventListener("load", () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            console.log("Video uploaded successfully");
-            resolve();
-          } else {
-            console.error(`Video upload HTTP error: ${xhr.status} ${xhr.statusText}`, xhr.responseText);
-            reject(new Error(`Video upload failed: ${xhr.status} ${xhr.statusText}`));
-          }
-        });
-
-        xhr.addEventListener("error", (e) => {
-          console.error("Video upload network error:", e);
-          console.error("This is likely a CORS issue. Ensure your R2 bucket has CORS configured.");
-          reject(new Error("CORS_ERROR"));
-        });
-        xhr.addEventListener("abort", () => reject(new Error("Video upload cancelled")));
-
-        xhr.send(singleVideoFile);
-      });
-
-      // Upload thumbnail
-      console.log("Uploading thumbnail to R2...");
-      const thumbRes = await fetch(uploadUrls.thumbnail.uploadUrl, {
+      // Step 2a: Kick off thumbnail upload immediately — runs in parallel with the video
+      const thumbnailPromise = fetch(thumbnail.uploadUrl, {
         method: "PUT",
         headers: { "Content-Type": thumbnailFile.type },
         body: thumbnailFile,
       });
+
+      // Step 2b: Upload video chunks in parallel
+      log.info("Starting parallel upload", { concurrency: 8 });
+      const uploadResult = await uploadFileInParallel({
+        file: singleVideoFile,
+        partUrls: video.partUrls,
+        partSize: video.partSize,
+        concurrency: 8,
+        abortSignal: abortControllerRef.current.signal,
+        onProgress: (progress) => {
+          setUploadProgress(Math.round(progress.percentage * 0.9)); // 90% for video
+          setUploadStats(progress);
+        },
+        onPartComplete: (part) => {
+          log.debug(`Chunk complete`, { part: part.PartNumber, of: video.totalParts });
+        },
+      });
+
+      log.info("Video upload complete", {
+        time: `${uploadResult.totalTime.toFixed(1)}s`,
+        speed: formatSpeed(uploadResult.averageSpeed),
+      });
+      setUploadProgress(92);
+
+      // Step 3: Await thumbnail (almost certainly already done)
+      const thumbRes = await thumbnailPromise;
       if (!thumbRes.ok) {
         throw new Error("Thumbnail upload failed");
       }
       setUploadProgress(95);
 
-      // Upload subtitle if present
-      let subtitleUrl: string | null = null;
-      if (subtitleFile && uploadUrls.subtitle) {
-        console.log("Uploading subtitle to R2...");
-        const subRes = await fetch(uploadUrls.subtitle.uploadUrl, {
-          method: "PUT",
-          headers: { "Content-Type": subtitleFile.type || "text/plain" },
-          body: subtitleFile,
-        });
-        if (!subRes.ok) {
-          console.warn("Subtitle upload failed, continuing without subtitle");
-        } else {
-          subtitleUrl = uploadUrls.subtitle.publicUrl;
-        }
-      }
-      setUploadProgress(98);
+      setUploadProgress(97);
 
-      // Step 3: Confirm upload and save URLs to database
-      console.log("Confirming upload...");
-      const confirmRes = await fetch("/api/movies/confirm-upload", {
+      // Step 4: Complete multipart upload and save to database
+      log.info("Finalizing upload");
+      const completeRes = await fetch("/api/movies/multipart-complete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           movieId,
-          videoUrl: uploadUrls.video.publicUrl,
-          thumbnailUrl: uploadUrls.thumbnail.publicUrl,
-          subtitleUrl,
+          uploadId: video.uploadId,
+          key: video.key,
+          thumbnailKey: thumbnail.key,
+          parts: uploadResult.parts,
+          finalStatus: confirmedStatus,
         }),
       });
 
-      const confirmData = await confirmRes.json();
-      if (!confirmRes.ok || !confirmData.success) {
-        throw new Error(confirmData.error ?? "Failed to confirm upload");
+      const completeData = await completeRes.json();
+      if (!completeRes.ok || !completeData.success) {
+        throw new Error(completeData.error ?? "Failed to finalize upload");
       }
 
       setUploadProgress(100);
-      toastSuccess("Movie uploaded successfully");
-      window.location.href = "/movies/single";
+      toastSuccess(`Movie uploaded in ${uploadResult.totalTime.toFixed(0)}s!`);
+      router.push("/movies/single");
     } catch (err) {
-      console.error("Upload error:", err);
-      
-      // Check if it's a CORS error and provide helpful message
-      const errorMessage = err instanceof Error ? err.message : "";
-      if (errorMessage === "CORS_ERROR" || errorMessage.includes("CORS")) {
-        toastError("Upload failed: CORS not configured on R2. Configure CORS in Cloudflare R2 dashboard, or use files under 50MB.");
+      log.error("Upload error", err);
+      const errorMessage = err instanceof Error ? err.message : "Upload failed";
+
+      // Best-effort cleanup: abort the R2 multipart upload and delete the
+      // orphaned "uploading" movie record so no garbage is left behind.
+      if (uploadMetaRef.current) {
+        fetch("/api/movies/multipart-complete", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            movieId: uploadMetaRef.current.movieId,
+            uploadId: uploadMetaRef.current.uploadId,
+            key: uploadMetaRef.current.key,
+          }),
+        }).catch(() => {});
+      }
+
+      if (errorMessage.includes("abort")) {
+        toastError("Upload cancelled");
+      } else if (errorMessage.includes("network") || errorMessage.includes("CORS")) {
+        toastError("Network error. Make sure CORS is configured on your R2 bucket.");
       } else {
-        toastError(err instanceof Error ? err.message : "Failed to upload movie. Please try again.");
+        toastError(errorMessage);
       }
     } finally {
       setIsUploading(false);
       setUploadProgress(0);
+      setUploadStats(null);
+      abortControllerRef.current = null;
+      uploadMetaRef.current = null;
+    }
+  };
+
+  const handleCancelUpload = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
   };
 
@@ -323,7 +285,10 @@ export default function SingleMovieUploadPage() {
           <Card>
             <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-4">Step 1: Basic Info</h3>
             <div className="space-y-4">
-              <Input label="Title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Movie title" required />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input label="Title (English)" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Movie title" required />
+                <Input label="Title (Khmer)" value={titleKh} onChange={(e) => setTitleKh(e.target.value)} placeholder="ឈ្មោះភាពយន្ត" />
+              </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Description</label>
                 <textarea
@@ -378,7 +343,7 @@ export default function SingleMovieUploadPage() {
             </Card>
             <Card>
               <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-4">Pricing</h3>
-              <Input label="Price (USD)" type="number" step="0.01" min="2" max="10" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="2.99" hint="One-time purchase ($2–3 typical)" required />
+              <Input label="Price (USD)" type="number" step="0.01" min="0.01" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="2.99" hint="One-time purchase price" required />
             </Card>
           </div>
         )}
@@ -394,13 +359,6 @@ export default function SingleMovieUploadPage() {
               </div>
               <Select label="Status" options={[{ value: "draft", label: "Draft" }, { value: "published", label: "Published" }]} value={status} onChange={(e) => setStatus(e.target.value as "draft" | "published")} />
               <Input label="Trailer URL" type="url" value={trailerUrl} onChange={(e) => setTrailerUrl(e.target.value)} placeholder="https://youtube.com/..." hint="Optional" />
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Subtitle File (Optional)</label>
-                <label className={`block border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${subtitleFile ? "border-emerald-500/50 bg-emerald-500/10" : "border-slate-300 dark:border-slate-600 hover:border-slate-400"}`}>
-                  <input type="file" accept=".srt,.vtt,.ass" className="hidden" onChange={(e) => setSubtitleFile(e.target.files?.[0] ?? null)} />
-                  {subtitleFile ? <span className="text-sm text-emerald-600 dark:text-emerald-400">{subtitleFile.name}</span> : <span className="text-sm text-slate-500">SRT, VTT, or ASS</span>}
-                </label>
-              </div>
             </div>
           </Card>
         )}
@@ -413,6 +371,7 @@ export default function SingleMovieUploadPage() {
               <div>
                 <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Movie</p>
                 <p className="font-medium text-slate-900 dark:text-white">{title || "—"}</p>
+                {titleKh && <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">{titleKh}</p>}
                 {description && <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{description.slice(0, 100)}...</p>}
               </div>
               {cast && (
@@ -429,31 +388,120 @@ export default function SingleMovieUploadPage() {
           </Card>
         )}
 
-        {isUploading && (
-          <Card>
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-600 dark:text-slate-400">Uploading video...</span>
-                <span className="font-medium text-slate-900 dark:text-white">{uploadProgress}%</span>
-              </div>
-              <div className="h-2.5 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-red-500 to-red-600 transition-all duration-200 ease-linear"
-                  style={{ width: `${uploadProgress}%` }}
-                />
-              </div>
-              <p className="text-xs text-slate-500">
-                Please wait while your video is being uploaded...
-              </p>
-            </div>
-          </Card>
-        )}
-
         <div className="flex gap-3">
           {step > 1 ? <Button type="button" variant="outline" onClick={handleBack} disabled={isUploading}>Back</Button> : <Link href="/upload"><Button type="button" variant="outline" disabled={isUploading}>Cancel</Button></Link>}
           {step < 4 ? <Button type="submit" disabled={!canProceed()}>Next</Button> : <Button type="submit" isLoading={isUploading} disabled={isUploading}>Upload Movie</Button>}
         </div>
       </form>
+
+      {/* ── Upload progress modal ──────────────────────────────────────────── */}
+      {isUploading && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+
+          {/* Modal card */}
+          <div className="relative w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+
+            {/* Animated top progress stripe */}
+            <div className="h-1 w-full bg-slate-200 dark:bg-slate-700">
+              <div
+                className="h-full bg-linear-to-r from-red-500 via-rose-400 to-red-600 transition-all duration-200 ease-linear"
+                style={{ width: `${uploadProgress}%` }}
+              />
+            </div>
+
+            <div className="p-6 space-y-5">
+              {/* Header */}
+              <div className="flex items-start gap-4">
+                {/* Pulsing upload icon */}
+                <div className="shrink-0 w-12 h-12 rounded-xl bg-red-500/10 dark:bg-red-500/20 flex items-center justify-center">
+                  <svg
+                    className="w-6 h-6 text-red-500 animate-pulse"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">
+                    Uploading — {title}
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    {uploadProgress < 92
+                      ? "Transferring video chunks…"
+                      : uploadProgress < 95
+                        ? "Finalizing thumbnail…"
+                        : uploadProgress < 97
+                          ? "Uploading subtitles…"
+                          : uploadProgress < 100
+                            ? "Saving to database…"
+                            : "Complete!"}
+                  </p>
+                </div>
+                <span className="shrink-0 text-2xl font-bold tabular-nums text-red-500">
+                  {uploadProgress}%
+                </span>
+              </div>
+
+              {/* Progress bar */}
+              <div className="space-y-1.5">
+                <div className="h-2.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-linear-to-r from-red-500 to-rose-500 transition-all duration-200 ease-linear"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Stats grid */}
+              {uploadStats && (
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-xl bg-slate-50 dark:bg-slate-800 px-3 py-2.5 text-center">
+                    <p className="text-xs text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">Speed</p>
+                    <p className="text-sm font-semibold text-slate-900 dark:text-white tabular-nums">
+                      {formatSpeed(uploadStats.speed)}
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-slate-50 dark:bg-slate-800 px-3 py-2.5 text-center">
+                    <p className="text-xs text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">Done</p>
+                    <p className="text-sm font-semibold text-slate-900 dark:text-white tabular-nums">
+                      {formatBytes(uploadStats.uploadedBytes)}
+                    </p>
+                    <p className="text-xs text-slate-400 dark:text-slate-500 tabular-nums">
+                      / {formatBytes(uploadStats.totalBytes)}
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-slate-50 dark:bg-slate-800 px-3 py-2.5 text-center">
+                    <p className="text-xs text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">ETA</p>
+                    <p className="text-sm font-semibold text-slate-900 dark:text-white tabular-nums">
+                      {uploadStats.eta > 0 ? formatTime(uploadStats.eta) : "—"}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Chunk counter */}
+              {uploadStats && (
+                <p className="text-xs text-slate-400 dark:text-slate-500 text-center">
+                  Chunk {uploadStats.currentParts} / {uploadStats.totalParts} · 8 parallel connections
+                </p>
+              )}
+
+              {/* Cancel */}
+              <button
+                type="button"
+                onClick={handleCancelUpload}
+                className="w-full py-2.5 rounded-xl text-sm font-medium text-red-500 border border-red-200 dark:border-red-500/20 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+              >
+                Cancel Upload
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
