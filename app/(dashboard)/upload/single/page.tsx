@@ -47,6 +47,7 @@ export default function SingleMovieUploadPage() {
   const [cast, setCast] = useState("");
 
   // Step 2: Media
+  const [pricingType, setPricingType] = useState<"free" | "paid">("paid");
   const [price, setPrice] = useState("2.99");
   const [singleVideoFile, setSingleVideoFile] = useState<File | null>(null);
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
@@ -93,6 +94,13 @@ export default function SingleMovieUploadPage() {
       toastError(`Thumbnail is too large. Maximum size is ${MAX_IMAGE_BYTES / 1024 / 1024}MB`);
       return;
     }
+    if (pricingType === "paid") {
+      const p = parseFloat(price);
+      if (!price.trim() || isNaN(p) || p < 0.01) {
+        toastError("Please enter a valid price (minimum $0.01) for paid movies.");
+        return;
+      }
+    }
 
     setIsUploading(true);
     setUploadProgress(0);
@@ -111,7 +119,7 @@ export default function SingleMovieUploadPage() {
           description,
           genre,
           cast,
-          price: price ? parseFloat(price) : null,
+          price: pricingType === "paid" && price.trim() ? parseFloat(price) : null,
           releaseDate,
           duration: duration ? parseInt(duration, 10) : null,
           finalStatus: status,
@@ -343,7 +351,45 @@ export default function SingleMovieUploadPage() {
             </Card>
             <Card>
               <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-4">Pricing</h3>
-              <Input label="Price (USD)" type="number" step="0.01" min="0.01" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="2.99" hint="One-time purchase price" required />
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Access</p>
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="pricingType"
+                        checked={pricingType === "free"}
+                        onChange={() => setPricingType("free")}
+                        className="rounded-full border-slate-300 dark:border-slate-600 text-red-500 focus:ring-red-500/50"
+                      />
+                      <span className="text-sm text-slate-700 dark:text-slate-300">Free</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="pricingType"
+                        checked={pricingType === "paid"}
+                        onChange={() => setPricingType("paid")}
+                        className="rounded-full border-slate-300 dark:border-slate-600 text-red-500 focus:ring-red-500/50"
+                      />
+                      <span className="text-sm text-slate-700 dark:text-slate-300">Paid</span>
+                    </label>
+                  </div>
+                </div>
+                {pricingType === "paid" && (
+                  <Input
+                    label="Price (USD)"
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                    placeholder="2.99"
+                    hint="One-time purchase price"
+                  />
+                )}
+              </div>
             </Card>
           </div>
         )}
@@ -382,7 +428,9 @@ export default function SingleMovieUploadPage() {
               )}
               <div>
                 <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Price</p>
-                <p className="font-medium text-slate-900 dark:text-white">${price}</p>
+                <p className="font-medium text-slate-900 dark:text-white">
+                  {pricingType === "free" ? "Free" : `$${price || "0.00"}`}
+                </p>
               </div>
             </div>
           </Card>

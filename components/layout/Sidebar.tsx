@@ -65,22 +65,22 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-64 flex-shrink-0 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/50 flex flex-col">
-      <div className="p-4 border-b border-slate-200 dark:border-slate-800">
+    <aside className="w-52 flex-shrink-0 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/50 flex flex-col">
+      <div className="p-3 border-b border-slate-200 dark:border-slate-800">
         <Link href="/overview" className="flex items-center gap-2">
           <Image
             src="/logo.png"
             alt="ReelTime"
-            width={36}
-            height={36}
+            width={28}
+            height={28}
             className="rounded-lg object-contain shrink-0"
           />
-          <span className="font-semibold text-slate-900 dark:text-white text-lg tracking-tight">
+          <span className="font-semibold text-slate-900 dark:text-white text-base tracking-tight">
             ReelTime
           </span>
         </Link>
       </div>
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className="flex-1 p-3 space-y-0.5">
         {navItems.map((item) => {
           const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (
@@ -88,7 +88,7 @@ export function Sidebar() {
               key={item.href}
               href={item.href}
               className={`
-                flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium
+                flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium
                 transition-colors
                 ${
                   isActive
@@ -97,13 +97,13 @@ export function Sidebar() {
                 }
               `}
             >
-              <item.icon className="w-5 h-5 shrink-0" />
+              <item.icon className="w-4 h-4 shrink-0" />
               {item.label}
             </Link>
           );
         })}
       </nav>
-      <div className="p-4 border-t border-slate-200 dark:border-slate-800">
+      <div className="p-3 border-t border-slate-200 dark:border-slate-800">
         <p className="text-xs text-slate-600 dark:text-slate-500">Admin Dashboard v1.0</p>
       </div>
     </aside>
