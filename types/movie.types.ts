@@ -12,7 +12,6 @@ export interface Movie {
   duration: number | null;
   thumbnail_url: string | null;
   video_url: string | null;
-  subtitle_url: string | null;
   status: MovieStatus;
   type: MovieType;
   /** Price in USD for single movies (one-time purchase, e.g. $2–3) */
@@ -25,12 +24,6 @@ export interface Movie {
   total_episodes: number | null;
   /** Cast/actors - comma-separated */
   cast?: string | null;
-  director?: string | null;
-  producer?: string | null;
-  country?: string | null;
-  language?: string | null;
-  content_rating?: string | null;
-  tags?: string | null;
   trailer_url?: string | null;
   created_at: string;
   updated_at: string;

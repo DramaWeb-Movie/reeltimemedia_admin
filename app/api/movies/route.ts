@@ -14,7 +14,6 @@ function mapSupabaseRow(row: Record<string, unknown>): Movie {
     duration: row.duration != null ? Number(row.duration) : null,
     thumbnail_url: (row.thumbnail_url as string) ?? null,
     video_url: (row.video_url as string) ?? null,
-    subtitle_url: (row.subtitle_url as string) ?? null,
     status: (row.status as Movie["status"]) ?? "draft",
     type: (row.type as Movie["type"]) ?? "single",
     price: row.price != null ? Number(row.price) : null,

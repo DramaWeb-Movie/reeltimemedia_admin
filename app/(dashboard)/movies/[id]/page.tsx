@@ -122,13 +122,45 @@ export default function MovieDetailPage() {
                 controls
                 playsInline
                 preload="metadata"
-                {...(movie.subtitle_url && { crossOrigin: "anonymous" })}
               >
-                {movie.subtitle_url && (
-                  <track kind="subtitles" src={movie.subtitle_url} srcLang="en" label="English" default />
-                )}
                 Your browser does not support the video tag.
               </video>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Trailer (when trailer_url is set) */}
+        {movie.trailer_url ? (
+          <div className="space-y-2">
+            <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+              Trailer
+            </h2>
+            <div className="rounded-2xl overflow-hidden bg-black shadow-xl ring-1 ring-slate-200/50 dark:ring-slate-700/50">
+              <div className="aspect-video w-full max-w-2xl">
+                {movie.trailer_url.includes("youtube.com") || movie.trailer_url.includes("youtu.be") ? (
+                  <iframe
+                    title="Trailer"
+                    className="w-full h-full"
+                    src={
+                      movie.trailer_url.includes("youtu.be/")
+                        ? `https://www.youtube.com/embed/${movie.trailer_url.split("youtu.be/")[1]?.split("?")[0] ?? ""}`
+                        : movie.trailer_url.replace("watch?v=", "embed/").split("&")[0]
+                    }
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                ) : (
+                  <video
+                    className="w-full h-full object-contain"
+                    src={movie.trailer_url}
+                    controls
+                    playsInline
+                    preload="metadata"
+                  >
+                    Your browser does not support the video tag.
+                  </video>
+                )}
+              </div>
             </div>
           </div>
         ) : null}
@@ -327,6 +359,21 @@ export default function MovieDetailPage() {
             <div className="col-span-2 sm:col-span-3">
               <dt className="text-slate-500 dark:text-slate-400">Video URL</dt>
               <dd className="font-medium text-slate-900 dark:text-white mt-0.5 break-all text-xs">{movie.video_url}</dd>
+            </div>
+          ) : null}
+          {movie.trailer_url ? (
+            <div className="col-span-2 sm:col-span-3">
+              <dt className="text-slate-500 dark:text-slate-400">Trailer URL</dt>
+              <dd className="font-medium text-slate-900 dark:text-white mt-0.5 break-all text-xs">
+                <a
+                  href={movie.trailer_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-red-600 dark:text-red-400 hover:underline"
+                >
+                  {movie.trailer_url}
+                </a>
+              </dd>
             </div>
           ) : null}
         </dl>

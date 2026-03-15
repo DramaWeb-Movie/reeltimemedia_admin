@@ -104,7 +104,6 @@ export async function POST(request: NextRequest) {
       trailer_url: trailerUrl || null,
       thumbnail_url: null,
       video_url: null,
-      subtitle_url: null,
     })
     .select("id")
     .single();

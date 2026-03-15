@@ -12,7 +12,6 @@ export const runtime = "nodejs";
  *   movieId: string;
  *   videoUrl: string;
  *   thumbnailUrl: string;
- *   subtitleUrl?: string;
  * }
  */
 export async function POST(request: NextRequest) {
@@ -22,7 +21,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    const { movieId, videoUrl, thumbnailUrl, subtitleUrl } = body;
+    const { movieId, videoUrl, thumbnailUrl } = body;
 
     if (!movieId || !videoUrl || !thumbnailUrl) {
       return NextResponse.json(
@@ -53,7 +52,6 @@ export async function POST(request: NextRequest) {
       .update({
         video_url: videoUrl,
         thumbnail_url: thumbnailUrl,
-        subtitle_url: subtitleUrl || null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", movieId);
@@ -72,7 +70,6 @@ export async function POST(request: NextRequest) {
         id: movieId,
         video_url: videoUrl,
         thumbnail_url: thumbnailUrl,
-        subtitle_url: subtitleUrl || null,
       },
     });
   } catch (err) {

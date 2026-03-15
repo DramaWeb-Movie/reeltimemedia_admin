@@ -21,7 +21,6 @@ export const runtime = "nodejs";
  *   trailerUrl?: string;
  *   videoType: string; // MIME type e.g. "video/mp4"
  *   thumbnailType: string; // MIME type e.g. "image/jpeg"
- *   subtitleFileName?: string; // Optional subtitle filename
  * }
  * 
  * Returns: {
@@ -30,7 +29,6 @@ export const runtime = "nodejs";
  *   uploadUrls: {
  *     video: { uploadUrl: string; key: string; publicUrl: string };
  *     thumbnail: { uploadUrl: string; key: string; publicUrl: string };
- *     subtitle?: { uploadUrl: string; key: string; publicUrl: string } | null;
  *   }
  * }
  */
@@ -53,7 +51,6 @@ export async function POST(request: NextRequest) {
       trailerUrl,
       videoType,
       thumbnailType,
-      subtitleFileName,
     } = body;
 
     // Validate required fields
@@ -88,7 +85,6 @@ export async function POST(request: NextRequest) {
         trailer_url: trailerUrl || null,
         thumbnail_url: null,
         video_url: null,
-        subtitle_url: null,
       })
       .select("id")
       .single();
@@ -107,8 +103,7 @@ export async function POST(request: NextRequest) {
     const uploadUrls = await generateMovieUploadUrls(
       movieId,
       videoType,
-      thumbnailType,
-      subtitleFileName
+      thumbnailType
     );
 
     return NextResponse.json({

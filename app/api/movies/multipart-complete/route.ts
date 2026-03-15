@@ -33,7 +33,6 @@ export async function POST(request: NextRequest) {
       uploadId,
       key,          // video key, e.g. "movies/<id>/video.mp4"
       thumbnailKey, // thumbnail key, e.g. "movies/<id>/thumbnail.jpg"
-      subtitleKey,  // optional, e.g. "movies/<id>/subtitles/en.vtt"
       parts,
       finalStatus = "draft",
     } = body;
@@ -54,17 +53,13 @@ export async function POST(request: NextRequest) {
     if (!thumbnailKey.startsWith(expectedPrefix)) {
       return NextResponse.json({ error: "Invalid thumbnail key" }, { status: 400 });
     }
-    if (subtitleKey && !subtitleKey.startsWith(expectedPrefix)) {
-      return NextResponse.json({ error: "Invalid subtitle key" }, { status: 400 });
-    }
 
     // Complete the multipart upload in R2
     await completeMultipartUpload(key, uploadId, parts);
 
-    // Construct all URLs server-side — never from client input
+    // Construct URLs server-side — never from client input
     const videoUrl = buildPublicUrl(key);
     const thumbnailUrl = buildPublicUrl(thumbnailKey);
-    const subtitleUrl = subtitleKey ? buildPublicUrl(subtitleKey) : null;
 
     // Update movie record: set real URLs and promote to the user's chosen status
     const supabase = createAdminClient();
@@ -73,7 +68,6 @@ export async function POST(request: NextRequest) {
       .update({
         video_url: videoUrl,
         thumbnail_url: thumbnailUrl,
-        subtitle_url: subtitleUrl,
         status: finalStatus,
         updated_at: new Date().toISOString(),
       })
@@ -91,7 +85,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      movie: { id: movieId, video_url: videoUrl, thumbnail_url: thumbnailUrl, subtitle_url: subtitleUrl },
+      movie: { id: movieId, video_url: videoUrl, thumbnail_url: thumbnailUrl },
     });
   } catch (err) {
     log.error("Multipart complete error", err);

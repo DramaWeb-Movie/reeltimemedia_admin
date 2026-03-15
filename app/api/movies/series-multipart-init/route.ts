@@ -121,7 +121,6 @@ export async function POST(request: NextRequest) {
       subscription_plan_id: null,
       thumbnail_url: null,
       video_url: null,
-      subtitle_url: null,
       trailer_url: null,
     })
     .select("id")

@@ -483,7 +483,7 @@ export default function SingleMovieUploadPage() {
                       : uploadProgress < 95
                         ? "Finalizing thumbnail…"
                         : uploadProgress < 97
-                          ? "Uploading subtitles…"
+                          ? "Finalizing…"
                           : uploadProgress < 100
                             ? "Saving to database…"
                             : "Complete!"}

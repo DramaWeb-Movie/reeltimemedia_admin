@@ -14,7 +14,6 @@ function mapSupabaseRow(row: Record<string, unknown>): Movie {
     duration: row.duration != null ? Number(row.duration) : null,
     thumbnail_url: (row.thumbnail_url as string) ?? null,
     video_url: (row.video_url as string) ?? null,
-    subtitle_url: (row.subtitle_url as string) ?? null,
     status: (row.status as Movie["status"]) ?? "draft",
     type: (row.type as Movie["type"]) ?? "single",
     price: row.price != null ? Number(row.price) : null,
@@ -81,7 +80,6 @@ export async function PATCH(
       subscription_plan_id: "subscription_plan_id",
       thumbnail_url: "thumbnail_url",
       video_url: "video_url",
-      subtitle_url: "subtitle_url",
     };
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
     for (const [key, col] of Object.entries(allowed)) {

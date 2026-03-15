@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { uploadVideo, uploadThumbnail, uploadSubtitle } from "@/lib/r2/upload";
+import { uploadVideo, uploadThumbnail } from "@/lib/r2/upload";
 import { requireAuth } from "@/lib/auth/requireAuth";
 
 // Route segment config to allow large file uploads (up to 5GB)
@@ -40,7 +40,6 @@ export async function POST(request: NextRequest) {
 
     const videoFile = formData.get("video") as File | null;
     const thumbnailFile = formData.get("thumbnail") as File | null;
-    const subtitleFile = formData.get("subtitle") as File | null;
 
     if (!title?.trim()) {
       return NextResponse.json(
@@ -72,7 +71,6 @@ export async function POST(request: NextRequest) {
         trailer_url: trailerUrl,
         thumbnail_url: null,
         video_url: null,
-        subtitle_url: null,
       })
       .select("id")
       .single();
@@ -87,12 +85,9 @@ export async function POST(request: NextRequest) {
 
     const movieId = movie.id;
 
-    const [videoUrl, thumbnailUrl, subtitleUrl] = await Promise.all([
+    const [videoUrl, thumbnailUrl] = await Promise.all([
       uploadVideo(movieId, videoFile),
       uploadThumbnail(movieId, thumbnailFile),
-      subtitleFile?.size
-        ? uploadSubtitle(movieId, subtitleFile)
-        : Promise.resolve(null),
     ]);
 
     const { error: updateError } = await supabase
@@ -100,7 +95,6 @@ export async function POST(request: NextRequest) {
       .update({
         video_url: videoUrl,
         thumbnail_url: thumbnailUrl,
-        subtitle_url: subtitleUrl,
         updated_at: new Date().toISOString(),
       })
       .eq("id", movieId);
@@ -115,7 +109,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      movie: { id: movieId, video_url: videoUrl, thumbnail_url: thumbnailUrl, subtitle_url: subtitleUrl },
+      movie: { id: movieId, video_url: videoUrl, thumbnail_url: thumbnailUrl },
     });
   } catch (err) {
     console.error("Upload error:", err);
