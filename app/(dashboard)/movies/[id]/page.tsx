@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Spinner } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { HlsQualityPlayer } from "@/components/movies/HlsQualityPlayer";
 import type { Movie } from "@/types";
 
 const statusBadge: Record<Movie["status"], "default" | "success" | "warning" | "neutral"> = {
@@ -23,8 +24,16 @@ interface SeriesEpisode {
   title: string;
   duration: number | null;
   video_url: string | null;
+  encoding_status?: "pending" | "processing" | "ready" | "failed" | null;
+  encoding_error?: string | null;
+  hls_manifest_url?: string | null;
   is_free_preview: boolean;
   created_at: string;
+}
+
+function renderEncodingStatus(status?: string | null): string {
+  if (!status) return "not_started";
+  return status;
 }
 
 export default function MovieDetailPage() {
@@ -113,18 +122,15 @@ export default function MovieDetailPage() {
 
       {/* Hero: Video or poster + title block */}
       <div className="space-y-6">
-        {movie.video_url ? (
-          <div className="rounded-2xl overflow-hidden bg-black shadow-xl ring-1 ring-slate-200/50 dark:ring-slate-700/50">
-            <div className="aspect-video w-full">
-              <video
-                className="w-full h-full object-contain"
-                src={movie.video_url}
-                controls
-                playsInline
-                preload="metadata"
-              >
-                Your browser does not support the video tag.
-              </video>
+        {movie.video_url || movie.hls_manifest_url ? (
+          <div className="rounded-2xl overflow-hidden">
+            <div className="w-full max-w-3xl mx-auto">
+              <HlsQualityPlayer
+                className="w-full aspect-video object-contain"
+                manifestUrl={movie.hls_manifest_url}
+                fallbackUrl={movie.video_url}
+                poster={movie.thumbnail_url ?? undefined}
+              />
             </div>
           </div>
         ) : null}
@@ -135,8 +141,8 @@ export default function MovieDetailPage() {
             <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
               Trailer
             </h2>
-            <div className="rounded-2xl overflow-hidden bg-black shadow-xl ring-1 ring-slate-200/50 dark:ring-slate-700/50">
-              <div className="aspect-video w-full max-w-2xl">
+            <div className="rounded-2xl overflow-hidden bg-slate-50 dark:bg-slate-900/40 shadow-xl ring-1 ring-slate-200/50 dark:ring-slate-700/50">
+              <div className="aspect-video w-full max-w-2xl mx-auto">
                 {movie.trailer_url.includes("youtube.com") || movie.trailer_url.includes("youtu.be") ? (
                   <iframe
                     title="Trailer"
@@ -233,28 +239,39 @@ export default function MovieDetailPage() {
       </div>
 
       {/* Episodes (series only) – one player + compact list */}
-      {isSeries && episodes.length > 0 ? (
+      {isSeries && episodes.length === 0 ? (
+        <Card>
+          <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-4">
+            Episodes
+          </h2>
+          <div className="rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 py-12 text-center">
+            <svg className="w-10 h-10 mx-auto mb-3 text-slate-300 dark:text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            <p className="text-sm text-slate-500 dark:text-slate-400">No episodes yet.</p>
+            <Link href={`/movies/${id}/edit`} className="inline-block mt-3">
+              <Button size="sm" variant="outline">Add episodes</Button>
+            </Link>
+          </div>
+        </Card>
+      ) : isSeries && episodes.length > 0 ? (
         <Card>
           <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-4">
             Episodes ({episodes.length})
           </h2>
           {(() => {
             const selected = episodes[selectedEpisodeIndex];
-            const hasVideo = selected?.video_url;
+            const hasVideo = selected?.video_url || selected?.hls_manifest_url;
             return (
               <>
-                <div className="rounded-xl overflow-hidden bg-black shadow-lg ring-1 ring-slate-200/50 dark:ring-slate-700/50 aspect-video max-w-3xl mb-4">
-                  {hasVideo && selected?.video_url ? (
-                    <video
-                      key={selected.video_url}
-                      className="w-full h-full object-contain"
-                      src={selected.video_url}
-                      controls
-                      playsInline
-                      preload="metadata"
-                    >
-                      Your browser does not support the video tag.
-                    </video>
+                <div className="rounded-xl overflow-hidden bg-slate-50 dark:bg-slate-900/40 shadow-lg ring-1 ring-slate-200/50 dark:ring-slate-700/50 max-w-2xl mb-4">
+                  {hasVideo && selected ? (
+                    <HlsQualityPlayer
+                      key={`${selected.hls_manifest_url ?? ""}-${selected.video_url ?? ""}`}
+                      className="w-full aspect-video object-contain"
+                      manifestUrl={selected.hls_manifest_url}
+                      fallbackUrl={selected.video_url}
+                    />
                   ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 gap-2">
                       <span className="text-sm">
@@ -268,6 +285,53 @@ export default function MovieDetailPage() {
                     ? `Playing: Episode ${selected.episode_number}${selected.title ? ` — ${selected.title}` : ""}`
                     : "Click an episode below to play"}
                 </p>
+                {selected ? (
+                  <div className="mb-4 rounded-xl border border-slate-200 dark:border-slate-700 p-3 bg-slate-50/70 dark:bg-slate-800/30 space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Selected Episode Files
+                    </p>
+                    <div className="text-xs">
+                      <p className="text-slate-500 dark:text-slate-400">Original file</p>
+                      {selected.video_url ? (
+                        <a
+                          href={selected.video_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-red-600 dark:text-red-400 hover:underline break-all"
+                        >
+                          {selected.video_url}
+                        </a>
+                      ) : (
+                        <p className="text-slate-700 dark:text-slate-300">—</p>
+                      )}
+                    </div>
+                    <div className="text-xs">
+                      <p className="text-slate-500 dark:text-slate-400">Transcoded manifest (HLS)</p>
+                      {selected.hls_manifest_url ? (
+                        <a
+                          href={selected.hls_manifest_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-red-600 dark:text-red-400 hover:underline break-all"
+                        >
+                          {selected.hls_manifest_url}
+                        </a>
+                      ) : (
+                        <p className="text-slate-700 dark:text-slate-300">—</p>
+                      )}
+                    </div>
+                    <div className="text-xs grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-slate-500 dark:text-slate-400">Encoding status</p>
+                        <p className="text-slate-700 dark:text-slate-300">{renderEncodingStatus(selected.encoding_status)}</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-500 dark:text-slate-400">Encoding error</p>
+                        <p className="text-slate-700 dark:text-slate-300 break-all">{selected.encoding_error ?? "—"}</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
                 <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden max-h-72 overflow-y-auto">
                   <table className="w-full text-sm">
                     <thead className="bg-slate-50 dark:bg-slate-800/80 sticky top-0">
@@ -357,10 +421,44 @@ export default function MovieDetailPage() {
           </div>
           {movie.video_url ? (
             <div className="col-span-2 sm:col-span-3">
-              <dt className="text-slate-500 dark:text-slate-400">Video URL</dt>
-              <dd className="font-medium text-slate-900 dark:text-white mt-0.5 break-all text-xs">{movie.video_url}</dd>
+              <dt className="text-slate-500 dark:text-slate-400">Original file URL</dt>
+              <dd className="font-medium text-slate-900 dark:text-white mt-0.5 break-all text-xs">
+                <a
+                  href={movie.video_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-red-600 dark:text-red-400 hover:underline"
+                >
+                  {movie.video_url}
+                </a>
+              </dd>
             </div>
           ) : null}
+          <div className="col-span-2 sm:col-span-3">
+            <dt className="text-slate-500 dark:text-slate-400">Transcoded manifest (HLS)</dt>
+            <dd className="font-medium text-slate-900 dark:text-white mt-0.5 break-all text-xs">
+              {movie.hls_manifest_url ? (
+                <a
+                  href={movie.hls_manifest_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-red-600 dark:text-red-400 hover:underline"
+                >
+                  {movie.hls_manifest_url}
+                </a>
+              ) : (
+                "—"
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-slate-500 dark:text-slate-400">Encoding status</dt>
+            <dd className="font-medium text-slate-900 dark:text-white mt-0.5">{renderEncodingStatus(movie.encoding_status)}</dd>
+          </div>
+          <div className="col-span-2 sm:col-span-3">
+            <dt className="text-slate-500 dark:text-slate-400">Encoding error</dt>
+            <dd className="font-medium text-slate-900 dark:text-white mt-0.5 break-all text-xs">{movie.encoding_error ?? "—"}</dd>
+            </div>
           {movie.trailer_url ? (
             <div className="col-span-2 sm:col-span-3">
               <dt className="text-slate-500 dark:text-slate-400">Trailer URL</dt>

@@ -90,7 +90,6 @@ export default function EditMoviePage() {
   const videoAbortRef = useRef<AbortController | null>(null);
   const videoMetaRef = useRef<{ uploadId: string; key: string } | null>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
-
   const loadEpisodes = useCallback(() => {
     if (movie?.type !== "series") return;
     setEpisodesLoading(true);
@@ -530,9 +529,18 @@ export default function EditMoviePage() {
                     {newVideoFile ? newVideoFile.name : "Choose video…"}
                   </button>
                   {newVideoFile && <p className="text-xs text-slate-400">{formatBytes(newVideoFile.size)}</p>}
-                  <Button type="button" size="sm" variant="secondary" disabled={!newVideoFile || isReplacingVideo} isLoading={isReplacingVideo} onClick={handleReplaceVideo}>
-                    {isReplacingVideo ? "Uploading…" : "Upload"}
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      disabled={!newVideoFile || isReplacingVideo}
+                      isLoading={isReplacingVideo}
+                      onClick={handleReplaceVideo}
+                    >
+                      {isReplacingVideo ? "Uploading…" : "Upload"}
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>

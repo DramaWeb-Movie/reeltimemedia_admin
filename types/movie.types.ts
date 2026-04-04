@@ -25,6 +25,9 @@ export interface Movie {
   /** Cast/actors - comma-separated */
   cast?: string | null;
   trailer_url?: string | null;
+  encoding_status?: "pending" | "processing" | "ready" | "failed" | null;
+  encoding_error?: string | null;
+  hls_manifest_url?: string | null;
   created_at: string;
   updated_at: string;
 }

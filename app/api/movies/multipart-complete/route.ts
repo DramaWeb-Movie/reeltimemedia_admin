@@ -4,6 +4,9 @@ import { completeMultipartUpload, abortMultipartUpload } from "@/lib/r2/multipar
 import { getR2Config } from "@/lib/r2/client";
 import { requireAuth } from "@/lib/auth/requireAuth";
 import { createLogger } from "@/lib/logger";
+import { notifyTelegramNewMovie } from "@/lib/notifications/telegram";
+import { validateMultipartComplete, validateKeyBelongsToMovie, validateFinalStatus } from "@/lib/validations";
+import { enqueueTranscodeJob } from "@/lib/upload/transcode";
 
 const log = createLogger("api:multipart-complete");
 
@@ -37,22 +40,18 @@ export async function POST(request: NextRequest) {
       finalStatus = "draft",
     } = body;
 
-    if (!movieId || !uploadId || !key || !thumbnailKey || !parts?.length) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
-    }
+    const fieldsError = validateMultipartComplete({ movieId, uploadId, key, thumbnailKey, parts });
+    if (fieldsError) return NextResponse.json({ error: fieldsError }, { status: 400 });
 
-    if (!["draft", "published"].includes(finalStatus)) {
-      return NextResponse.json({ error: "Invalid status" }, { status: 400 });
-    }
+    const statusError = validateFinalStatus(finalStatus);
+    if (statusError) return NextResponse.json({ error: statusError }, { status: 400 });
 
     // Validate keys belong to this movie so clients can't forge arbitrary paths
-    const expectedPrefix = `movies/${movieId}/`;
-    if (!key.startsWith(expectedPrefix)) {
-      return NextResponse.json({ error: "Invalid video key" }, { status: 400 });
-    }
-    if (!thumbnailKey.startsWith(expectedPrefix)) {
-      return NextResponse.json({ error: "Invalid thumbnail key" }, { status: 400 });
-    }
+    const videoKeyError = validateKeyBelongsToMovie(key, movieId);
+    if (videoKeyError) return NextResponse.json({ error: "Invalid video key" }, { status: 400 });
+
+    const thumbKeyError = validateKeyBelongsToMovie(thumbnailKey, movieId);
+    if (thumbKeyError) return NextResponse.json({ error: "Invalid thumbnail key" }, { status: 400 });
 
     // Complete the multipart upload in R2
     await completeMultipartUpload(key, uploadId, parts);
@@ -80,6 +79,30 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    const { data: movieRow } = await supabase
+      .from("movies")
+      .select("title, type, status")
+      .eq("id", movieId)
+      .single();
+
+    try {
+      await enqueueTranscodeJob({
+        kind: "single_movie",
+        movieId,
+        sourceKey: key,
+        outputKeyPrefix: `movies/${movieId}/hls`,
+      });
+    } catch (enqueueErr) {
+      log.warn("Transcode enqueue failed after upload finalize", { movieId, error: enqueueErr });
+    }
+
+    await notifyTelegramNewMovie({
+      movieId,
+      title: movieRow?.title ?? null,
+      type: movieRow?.type ?? "single",
+      status: movieRow?.status ?? finalStatus,
+    });
 
     log.info("Upload finalized", { movieId, status: finalStatus });
 

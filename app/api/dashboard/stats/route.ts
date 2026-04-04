@@ -6,6 +6,9 @@ import type {
 } from "@/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAuth } from "@/lib/auth/requireAuth";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("api:dashboard:stats");
 
 const EMPTY_STATS: DashboardStats = {
   totalUsers: 0,
@@ -203,7 +206,7 @@ export async function GET() {
       chartData,
     });
   } catch (err) {
-    console.error("Dashboard stats error:", err);
+    log.error("Dashboard stats error", err);
     return NextResponse.json(
       { error: "Failed to fetch dashboard stats" },
       { status: 500 }

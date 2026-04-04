@@ -22,6 +22,9 @@ function mapSupabaseRow(row: Record<string, unknown>): Movie {
     total_episodes: row.total_episodes != null ? Number(row.total_episodes) : null,
     cast: (row.cast as string) ?? null,
     trailer_url: (row.trailer_url as string) ?? null,
+    encoding_status: (row.encoding_status as Movie["encoding_status"]) ?? null,
+    encoding_error: (row.encoding_error as string) ?? null,
+    hls_manifest_url: (row.hls_manifest_url as string) ?? null,
     created_at: String(row.created_at ?? ""),
     updated_at: String(row.updated_at ?? ""),
   };

@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { uploadThumbnail, uploadEpisodeVideo } from "@/lib/r2/upload";
 import { requireAuth } from "@/lib/auth/requireAuth";
+import { notifyTelegramNewMovie } from "@/lib/notifications/telegram";
+import { createLogger } from "@/lib/logger";
+import { validateTitle, validateFilePresent } from "@/lib/validations";
+
+const log = createLogger("api:upload:series");
 
 // Route segment config to allow large file uploads (up to 5GB per episode)
 export const runtime = "nodejs";
@@ -43,23 +48,14 @@ export async function POST(request: Request) {
       }
     }
 
-    if (!title) {
-      return NextResponse.json(
-        { error: "Title is required" },
-        { status: 400 }
-      );
-    }
-    if (!thumbnailFile || thumbnailFile.size === 0) {
-      return NextResponse.json(
-        { error: "Cover image is required" },
-        { status: 400 }
-      );
-    }
+    const titleError = validateTitle(title);
+    if (titleError) return NextResponse.json({ error: titleError }, { status: 400 });
+
+    const thumbError = validateFilePresent(thumbnailFile, "Cover image");
+    if (thumbError) return NextResponse.json({ error: thumbError }, { status: 400 });
+
     if (episodesMeta.length === 0) {
-      return NextResponse.json(
-        { error: "At least one episode is required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "At least one episode is required" }, { status: 400 });
     }
 
     const supabase = createAdminClient();
@@ -87,7 +83,7 @@ export async function POST(request: Request) {
       .single();
 
     if (insertError) {
-      console.error("Series insert error:", insertError);
+      log.error("Series insert error", insertError);
       return NextResponse.json(
         {
           error:
@@ -102,9 +98,9 @@ export async function POST(request: Request) {
 
     let thumbnailUrl: string | null = null;
     try {
-      thumbnailUrl = await uploadThumbnail(movieId, thumbnailFile);
+      thumbnailUrl = await uploadThumbnail(movieId, thumbnailFile!);
     } catch (uploadErr) {
-      console.error("Thumbnail upload error:", uploadErr);
+      log.error("Thumbnail upload error", uploadErr);
       return NextResponse.json(
         { error: uploadErr instanceof Error ? uploadErr.message : "Failed to upload cover image" },
         { status: 500 }
@@ -120,7 +116,7 @@ export async function POST(request: Request) {
       .eq("id", movieId);
 
     if (updateError) {
-      console.error("Failed to save cover image URL:", updateError);
+      log.error("Failed to save cover image URL", updateError);
       return NextResponse.json(
         { error: "Series created but cover image could not be saved" },
         { status: 500 }
@@ -136,7 +132,7 @@ export async function POST(request: Request) {
         try {
           videoUrl = await uploadEpisodeVideo(movieId, epNum, videoFile);
         } catch (uploadErr) {
-          console.error(`Episode ${epNum} upload error:`, uploadErr);
+          log.error(`Episode ${epNum} upload error`, uploadErr);
           return NextResponse.json(
             {
               error:
@@ -157,7 +153,7 @@ export async function POST(request: Request) {
         is_free_preview: Boolean(meta.isFreePreview),
       });
       if (epError) {
-        console.error("Episode insert error:", epError);
+        log.error("Episode insert error", epError);
         return NextResponse.json(
           { error: epError.message ?? "Failed to save episode" },
           { status: 500 }
@@ -165,12 +161,19 @@ export async function POST(request: Request) {
       }
     }
 
+    await notifyTelegramNewMovie({
+      movieId,
+      title,
+      type: "series",
+      status,
+    });
+
     return NextResponse.json({
       success: true,
       movie: { id: movieId, thumbnail_url: thumbnailUrl },
     });
   } catch (err) {
-    console.error("Series upload error:", err);
+    log.error("Series upload error", err);
     const message = err instanceof Error ? err.message : "Failed to create series";
     return NextResponse.json({ error: message }, { status: 500 });
   }

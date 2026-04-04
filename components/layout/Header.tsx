@@ -82,6 +82,7 @@ export function Header() {
       </div>
       <div className="flex items-center gap-2">
         <button
+          type="button"
           onClick={toggleTheme}
           className="p-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}

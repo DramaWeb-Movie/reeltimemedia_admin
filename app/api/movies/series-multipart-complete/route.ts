@@ -4,6 +4,9 @@ import { completeMultipartUpload, abortMultipartUpload } from "@/lib/r2/multipar
 import { getR2Config } from "@/lib/r2/client";
 import { requireAuth } from "@/lib/auth/requireAuth";
 import { createLogger } from "@/lib/logger";
+import { notifyTelegramNewMovie } from "@/lib/notifications/telegram";
+import { validateFinalStatus, validateKeyBelongsToMovie } from "@/lib/validations";
+import { enqueueTranscodeJob } from "@/lib/upload/transcode";
 
 const log = createLogger("api:series-multipart-complete");
 
@@ -45,16 +48,16 @@ export async function POST(request: NextRequest) {
     if (!movieId || !thumbnailKey || !Array.isArray(episodes) || episodes.length === 0) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
-    if (!["draft", "published"].includes(finalStatus)) {
-      return NextResponse.json({ error: "Invalid status" }, { status: 400 });
-    }
 
-    const expectedPrefix = `movies/${movieId}/`;
-    if (!thumbnailKey.startsWith(expectedPrefix)) {
-      return NextResponse.json({ error: "Invalid thumbnail key" }, { status: 400 });
-    }
+    const statusError = validateFinalStatus(finalStatus);
+    if (statusError) return NextResponse.json({ error: statusError }, { status: 400 });
+
+    const thumbKeyError = validateKeyBelongsToMovie(thumbnailKey, movieId);
+    if (thumbKeyError) return NextResponse.json({ error: "Invalid thumbnail key" }, { status: 400 });
+
     for (const ep of episodes) {
-      if (!ep.key.startsWith(expectedPrefix)) {
+      const epKeyError = validateKeyBelongsToMovie(ep.key, movieId);
+      if (epKeyError) {
         return NextResponse.json(
           { error: `Invalid key for episode ${ep.episodeNumber}` },
           { status: 400 }
@@ -108,6 +111,64 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    const { data: movieRow } = await supabase
+      .from("movies")
+      .select("title, type, status")
+      .eq("id", movieId)
+      .single();
+
+    const episodeRowsWithIds = episodes.map((ep) => ({
+      sourceKey: ep.key,
+      episodeNumber: ep.episodeNumber,
+    }));
+
+    const { data: insertedEpisodes } = await supabase
+      .from("series_episodes")
+      .select("id, episode_number")
+      .eq("movie_id", movieId)
+      .in("episode_number", episodes.map((ep) => ep.episodeNumber));
+
+    const episodeIdByNumber = new Map(
+      (insertedEpisodes ?? []).map((ep) => [ep.episode_number as number, ep.id as string])
+    );
+
+    await Promise.all(
+      episodeRowsWithIds.map(async (item) => {
+        const episodeId = episodeIdByNumber.get(item.episodeNumber);
+        if (!episodeId) {
+          log.warn("Skipping episode transcode enqueue: episode row not found", {
+            movieId,
+            episodeNumber: item.episodeNumber,
+          });
+          return;
+        }
+
+        try {
+          await enqueueTranscodeJob({
+            kind: "single_episode",
+            movieId,
+            episodeId,
+            episodeNumber: item.episodeNumber,
+            sourceKey: item.sourceKey,
+            outputKeyPrefix: `movies/${movieId}/episodes/${item.episodeNumber}/hls`,
+          });
+        } catch (enqueueErr) {
+          log.warn("Episode transcode enqueue failed", {
+            movieId,
+            episodeNumber: item.episodeNumber,
+            error: enqueueErr,
+          });
+        }
+      })
+    );
+
+    await notifyTelegramNewMovie({
+      movieId,
+      title: movieRow?.title ?? null,
+      type: movieRow?.type ?? "series",
+      status: movieRow?.status ?? finalStatus,
+    });
 
     log.info("Series upload finalized", { movieId, episodes: episodes.length, status: finalStatus });
 

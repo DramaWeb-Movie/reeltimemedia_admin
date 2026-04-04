@@ -39,6 +39,60 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* Keep fullscreen flow inside our custom player so quality controls remain usable. */
+.hls-quality-player video::-webkit-media-controls-fullscreen-button,
+.hls-quality-player video::-webkit-media-controls-picture-in-picture-button,
+.hls-quality-player video::-webkit-media-controls-airplay-button,
+.hls-quality-player video::-webkit-media-controls-download-button {
+  display: none !important;
+}
+
+/* Consistent custom range styling for player controls */
+.rt-range {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
+
+.rt-range::-webkit-slider-runnable-track {
+  height: 6px;
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+
+.dark .rt-range::-webkit-slider-runnable-track {
+  background: #334155;
+}
+
+.rt-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -4px;
+  height: 14px;
+  width: 14px;
+  border-radius: 999px;
+  background: #ef4444;
+  border: 2px solid #ffffff;
+}
+
+.rt-range::-moz-range-track {
+  height: 6px;
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+
+.dark .rt-range::-moz-range-track {
+  background: #334155;
+}
+
+.rt-range::-moz-range-thumb {
+  height: 14px;
+  width: 14px;
+  border-radius: 999px;
+  background: #ef4444;
+  border: 2px solid #ffffff;
+}
+
 * {
   box-sizing: border-box;
 }

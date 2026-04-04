@@ -10,6 +10,9 @@ export interface SeriesEpisode {
   title: string;
   duration: number | null;
   video_url: string | null;
+  encoding_status?: "pending" | "processing" | "ready" | "failed" | null;
+  encoding_error?: string | null;
+  hls_manifest_url?: string | null;
   is_free_preview: boolean;
   created_at: string;
 }
@@ -22,6 +25,9 @@ function mapRow(row: Record<string, unknown>): SeriesEpisode {
     title: String(row.title ?? ""),
     duration: row.duration != null ? Number(row.duration) : null,
     video_url: (row.video_url as string) ?? null,
+    encoding_status: (row.encoding_status as SeriesEpisode["encoding_status"]) ?? null,
+    encoding_error: (row.encoding_error as string) ?? null,
+    hls_manifest_url: (row.hls_manifest_url as string) ?? null,
     is_free_preview: Boolean(row.is_free_preview),
     created_at: String(row.created_at ?? ""),
   };

@@ -4,7 +4,9 @@ import {
   createContext,
   useContext,
   useEffect,
-  useState,
+  useLayoutEffect,
+  useRef,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 
@@ -20,36 +22,67 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 const STORAGE_KEY = "reeltime-admin-theme";
 
-function getInitialTheme(): Theme {
-  if (typeof window === "undefined") return "dark";
+/** Must match `getServerSnapshot` and root layout script default (non-"light" → dark). */
+const SSR_THEME: Theme = "dark";
+
+let themeState: Theme = SSR_THEME;
+const listeners = new Set<() => void>();
+
+function subscribe(onStoreChange: () => void) {
+  listeners.add(onStoreChange);
+  return () => listeners.delete(onStoreChange);
+}
+
+function getSnapshot(): Theme {
+  return themeState;
+}
+
+function getServerSnapshot(): Theme {
+  return SSR_THEME;
+}
+
+function emitTheme(next: Theme) {
+  if (themeState !== next) {
+    themeState = next;
+    listeners.forEach((l) => l());
+  }
+}
+
+function readStoredTheme(): Theme {
   const stored = localStorage.getItem(STORAGE_KEY) as Theme | null;
   if (stored === "light" || stored === "dark") return stored;
   return document.documentElement.classList.contains("dark") ? "dark" : "light";
 }
 
-export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("dark");
-  const [mounted, setMounted] = useState(false);
+function applyDomAndStorage(theme: Theme) {
+  if (theme === "dark") {
+    document.documentElement.classList.add("dark");
+  } else {
+    document.documentElement.classList.remove("dark");
+  }
+  localStorage.setItem(STORAGE_KEY, theme);
+}
 
-  useEffect(() => {
-    setThemeState(getInitialTheme());
-    setMounted(true);
+export function ThemeProvider({ children }: { children: ReactNode }) {
+  const theme = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const skipFirstPersist = useRef(true);
+
+  useLayoutEffect(() => {
+    emitTheme(readStoredTheme());
   }, []);
 
   useEffect(() => {
-    if (!mounted) return;
-    if (theme === "dark") {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
+    if (skipFirstPersist.current) {
+      skipFirstPersist.current = false;
+      return;
     }
-    localStorage.setItem(STORAGE_KEY, theme);
-  }, [theme, mounted]);
+    applyDomAndStorage(theme);
+  }, [theme]);
 
-  const setTheme = (newTheme: Theme) => setThemeState(newTheme);
+  const setTheme = (newTheme: Theme) => emitTheme(newTheme);
 
   const toggleTheme = () =>
-    setThemeState((prev) => (prev === "dark" ? "light" : "dark"));
+    emitTheme(themeState === "dark" ? "light" : "dark");
 
   return (
     <ThemeContext.Provider value={{ theme, setTheme, toggleTheme }}>

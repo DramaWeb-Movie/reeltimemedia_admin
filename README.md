@@ -1,5 +1,9 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Video transcoding (ABR / HLS)
+
+Uploads today store a **single** file in R2. For multiple qualities (1080 / 720 / 360, etc.), see **[TRANSCODE_IMPLEMENTATION.md](./TRANSCODE_IMPLEMENTATION.md)** for a FastAPI + ffmpeg service design and how to trigger it from this admin app **without** proxying video bytes through the transcode API.
+
 ## Getting Started
 
 First, run the development server:

@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAuth } from "@/lib/auth/requireAuth";
+import { notifyTelegramNewMovie } from "@/lib/notifications/telegram";
+import { createLogger } from "@/lib/logger";
+import { validateMovieId } from "@/lib/validations";
+
+const log = createLogger("api:confirm-upload");
 
 export const runtime = "nodejs";
 
@@ -23,9 +28,12 @@ export async function POST(request: NextRequest) {
 
     const { movieId, videoUrl, thumbnailUrl } = body;
 
-    if (!movieId || !videoUrl || !thumbnailUrl) {
+    const idError = validateMovieId(movieId);
+    if (idError) return NextResponse.json({ error: idError }, { status: 400 });
+
+    if (!videoUrl || !thumbnailUrl) {
       return NextResponse.json(
-        { error: "movieId, videoUrl, and thumbnailUrl are required" },
+        { error: "videoUrl and thumbnailUrl are required" },
         { status: 400 }
       );
     }
@@ -35,7 +43,7 @@ export async function POST(request: NextRequest) {
     // Verify movie exists
     const { data: existingMovie, error: fetchError } = await supabase
       .from("movies")
-      .select("id")
+      .select("id, title, type, status")
       .eq("id", movieId)
       .single();
 
@@ -57,12 +65,19 @@ export async function POST(request: NextRequest) {
       .eq("id", movieId);
 
     if (updateError) {
-      console.error("Failed to update movie URLs:", updateError);
+      log.error("Failed to update movie URLs", updateError);
       return NextResponse.json(
         { error: "Failed to save file URLs" },
         { status: 500 }
       );
     }
+
+    await notifyTelegramNewMovie({
+      movieId,
+      title: existingMovie.title as string | null,
+      type: existingMovie.type as string | null,
+      status: existingMovie.status as string | null,
+    });
 
     return NextResponse.json({
       success: true,
@@ -73,7 +88,7 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (err) {
-    console.error("Confirm upload error:", err);
+    log.error("Confirm upload error", err);
     const message = err instanceof Error ? err.message : "Failed to confirm upload";
     return NextResponse.json({ error: message }, { status: 500 });
   }

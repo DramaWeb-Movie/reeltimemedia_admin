@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { uploadVideo, uploadThumbnail } from "@/lib/r2/upload";
 import { requireAuth } from "@/lib/auth/requireAuth";
+import { notifyTelegramNewMovie } from "@/lib/notifications/telegram";
+import { createLogger } from "@/lib/logger";
+import { validateTitle, validateVideoAndThumbnail } from "@/lib/validations";
+
+const log = createLogger("api:upload");
 
 // Route segment config to allow large file uploads (up to 5GB)
 export const runtime = "nodejs";
@@ -17,16 +22,16 @@ export async function POST(request: NextRequest) {
     // Validate Content-Type before parsing
     const contentType = request.headers.get("content-type") || "";
     if (!contentType.includes("multipart/form-data")) {
-      console.error("Invalid Content-Type:", contentType);
+      log.error("Invalid Content-Type", { contentType });
       return NextResponse.json(
         { error: "Content-Type must be multipart/form-data" },
         { status: 400 }
       );
     }
 
-    console.log("Parsing FormData, Content-Type:", contentType);
+    log.debug("Parsing FormData", { contentType });
     const formData = await request.formData();
-    console.log("FormData parsed successfully");
+    log.debug("FormData parsed successfully");
 
     const title = formData.get("title") as string;
     const description = (formData.get("description") as string) || null;
@@ -41,18 +46,11 @@ export async function POST(request: NextRequest) {
     const videoFile = formData.get("video") as File | null;
     const thumbnailFile = formData.get("thumbnail") as File | null;
 
-    if (!title?.trim()) {
-      return NextResponse.json(
-        { error: "Title is required" },
-        { status: 400 }
-      );
-    }
-    if (!videoFile || !thumbnailFile) {
-      return NextResponse.json(
-        { error: "Video and thumbnail are required" },
-        { status: 400 }
-      );
-    }
+    const titleError = validateTitle(title);
+    if (titleError) return NextResponse.json({ error: titleError }, { status: 400 });
+
+    const mediaError = validateVideoAndThumbnail(videoFile, thumbnailFile);
+    if (mediaError) return NextResponse.json({ error: mediaError }, { status: 400 });
 
     const supabase = createAdminClient();
 
@@ -76,7 +74,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (insertError) {
-      console.error("Supabase insert error:", insertError);
+      log.error("Supabase insert error", insertError);
       return NextResponse.json(
         { error: insertError.message ?? "Failed to create movie record. Ensure the movies table exists in Supabase." },
         { status: 500 }
@@ -86,8 +84,8 @@ export async function POST(request: NextRequest) {
     const movieId = movie.id;
 
     const [videoUrl, thumbnailUrl] = await Promise.all([
-      uploadVideo(movieId, videoFile),
-      uploadThumbnail(movieId, thumbnailFile),
+      uploadVideo(movieId, videoFile!),
+      uploadThumbnail(movieId, thumbnailFile!),
     ]);
 
     const { error: updateError } = await supabase
@@ -100,19 +98,26 @@ export async function POST(request: NextRequest) {
       .eq("id", movieId);
 
     if (updateError) {
-      console.error("Failed to update movie URLs:", updateError);
+      log.error("Failed to update movie URLs", updateError);
       return NextResponse.json(
         { error: "Files uploaded but failed to save URLs" },
         { status: 500 }
       );
     }
 
+    await notifyTelegramNewMovie({
+      movieId,
+      title: title.trim(),
+      type: "single",
+      status,
+    });
+
     return NextResponse.json({
       success: true,
       movie: { id: movieId, video_url: videoUrl, thumbnail_url: thumbnailUrl },
     });
   } catch (err) {
-    console.error("Upload error:", err);
+    log.error("Upload error", err);
     
     // Provide more specific error messages
     let message = "Upload failed";
