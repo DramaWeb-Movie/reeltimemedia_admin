@@ -10,7 +10,6 @@ interface MovieFiltersProps {
   onStatusChange: (status: string) => void;
   onTypeChange: (type: string) => void;
   onSearchChange: (search: string) => void;
-  /** When false, the type dropdown is hidden (e.g. on /movies/single or /movies/series). */
   showTypeFilter?: boolean;
 }
 

@@ -1,45 +1,62 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import { CastInput } from "@/components/ui/CastInput";
-import { Select } from "@/components/ui/Select";
 import { toastError, toastSuccess } from "@/lib/toast";
-import { GENRE_OPTIONS } from "@/lib/constants/genres";
 import {
   uploadFileInParallel,
   formatBytes,
   formatSpeed,
-  formatTime,
   type UploadProgress,
 } from "@/lib/upload/parallel-uploader";
 import { createLogger } from "@/lib/logger";
 import { MAX_VIDEO_BYTES, MAX_IMAGE_BYTES } from "@/lib/r2/mime";
 import type { EpisodeInput } from "@/types";
+import { EpisodeRow } from "./components/EpisodeRow";
+import { StepAccessCard } from "./components/StepAccessCard";
+import { StepDetailsCard } from "./components/StepDetailsCard";
+import { StepIndicator } from "./components/StepIndicator";
+import { StepReviewCard } from "./components/StepReviewCard";
+import { UploadProgressModal } from "./components/UploadProgressModal";
 
 const log = createLogger("upload:series");
 
 type SeriesAccess = "membership" | "free";
+type SeriesStatus = "draft" | "published";
 
-const STEPS = [
-  { id: 1, title: "Access", description: "Membership or free" },
-  { id: 2, title: "Details", description: "Series info" },
-  { id: 3, title: "Episodes", description: "Add episodes" },
-  { id: 4, title: "Review", description: "Confirm & upload" },
-] as const;
+const PROGRESS_UPDATE_INTERVAL_MS = 120;
+
+function getAdaptiveUploadConcurrency(): number {
+  if (typeof navigator === "undefined") return 8;
+
+  const effectiveType = (
+    navigator as Navigator & { connection?: { effectiveType?: string } }
+  ).connection?.effectiveType;
+
+  switch (effectiveType) {
+    case "slow-2g":
+    case "2g":
+      return 2;
+    case "3g":
+      return 4;
+    default:
+      return 8;
+  }
+}
 
 export default function SeriesUploadPage() {
   const router = useRouter();
+  const uploadConcurrency = useMemo(() => getAdaptiveUploadConcurrency(), []);
   const [step, setStep] = useState(1);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStats, setUploadStats] = useState<UploadProgress | null>(null);
   const [currentEpisodeIndex, setCurrentEpisodeIndex] = useState(0);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const lastProgressUpdateRef = useRef(0);
   const uploadMetaRef = useRef<{
     movieId: string;
     multiparts: Array<{ uploadId: string; key: string }>;
@@ -55,16 +72,28 @@ export default function SeriesUploadPage() {
   const [genre, setGenre] = useState("");
   const [releaseDate, setReleaseDate] = useState("");
   const [duration, setDuration] = useState("");
-  const [status, setStatus] = useState<"draft" | "published">("draft");
+  const [status, setStatus] = useState<SeriesStatus>("draft");
   const [cast, setCast] = useState("");
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [isDraggingThumbnail, setIsDraggingThumbnail] = useState(false);
   const thumbnailRef = useRef<HTMLInputElement>(null);
+  const thumbnailPreviewUrl = useMemo(
+    () => (thumbnailFile ? URL.createObjectURL(thumbnailFile) : null),
+    [thumbnailFile]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (thumbnailPreviewUrl) {
+        URL.revokeObjectURL(thumbnailPreviewUrl);
+      }
+    };
+  }, [thumbnailPreviewUrl]);
 
   // Step 3: Episodes
   const [episodes, setEpisodes] = useState<EpisodeInput[]>([]);
 
-  const addEpisode = () => {
+  const addEpisode = useCallback(() => {
     setEpisodes((prev) => [
       ...prev,
       {
@@ -76,24 +105,44 @@ export default function SeriesUploadPage() {
         isFreePreview: false,
       },
     ]);
-  };
+  }, []);
 
-  const removeEpisode = (id: string) => {
+  const removeEpisode = useCallback((id: string) => {
     setEpisodes((prev) => {
       const filtered = prev.filter((e) => e.id !== id);
       return filtered.map((e, i) => ({ ...e, episodeNumber: i + 1 }));
     });
-  };
+  }, []);
 
-  const updateEpisode = (id: string, updates: Partial<EpisodeInput>) => {
+  const updateEpisode = useCallback((id: string, updates: Partial<EpisodeInput>) => {
     setEpisodes((prev) =>
       prev.map((e) => (e.id === id ? { ...e, ...updates } : e))
     );
-  };
+  }, []);
 
-  const handleEpisodeFileChange = (id: string, file: File | null) => {
+  const handleEpisodeFileChange = useCallback((id: string, file: File | null) => {
     updateEpisode(id, { videoFile: file });
-  };
+  }, [updateEpisode]);
+
+  const handleThumbnailDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDraggingThumbnail((prev) => (prev ? prev : true));
+  }, []);
+
+  const handleThumbnailDragLeave = useCallback(() => {
+    setIsDraggingThumbnail((prev) => (prev ? false : prev));
+  }, []);
+
+  const handleThumbnailDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDraggingThumbnail(false);
+    const f = e.dataTransfer.files[0];
+    if (f?.type.startsWith("image/")) setThumbnailFile(f);
+  }, []);
+
+  const handleThumbnailFileChange = useCallback((file: File | null) => {
+    setThumbnailFile(file);
+  }, []);
 
   const canProceed = () => {
     if (step === 1) return true;
@@ -128,16 +177,42 @@ export default function SeriesUploadPage() {
       toastError(`Thumbnail is too large. Maximum is ${MAX_IMAGE_BYTES / 1024 / 1024}MB`);
       return;
     }
-    const missingVideo = episodes.find((ep) => !ep.videoFile);
-    if (missingVideo) {
-      toastError(`Episode ${missingVideo.episodeNumber} needs a video file.`);
+
+    let missingVideoEpisodeNumber: number | null = null;
+    let emptyVideoEpisodeNumber: number | null = null;
+    let oversizedVideoEpisodeNumber: number | null = null;
+
+    for (const ep of episodes) {
+      const videoFile = ep.videoFile;
+      if (!videoFile) {
+        missingVideoEpisodeNumber = ep.episodeNumber;
+        break;
+      }
+
+      if (videoFile.size <= 0) {
+        emptyVideoEpisodeNumber = ep.episodeNumber;
+        break;
+      }
+
+      if (videoFile.size > MAX_VIDEO_BYTES) {
+        oversizedVideoEpisodeNumber = ep.episodeNumber;
+        break;
+      }
+    }
+
+    if (missingVideoEpisodeNumber !== null) {
+      toastError(`Episode ${missingVideoEpisodeNumber} needs a video file.`);
       return;
     }
-    for (const ep of episodes) {
-      if (ep.videoFile && ep.videoFile.size > MAX_VIDEO_BYTES) {
-        toastError(`Episode ${ep.episodeNumber} video is too large (max ${MAX_VIDEO_BYTES / 1024 / 1024 / 1024}GB)`);
-        return;
-      }
+
+    if (emptyVideoEpisodeNumber !== null) {
+      toastError(`Episode ${emptyVideoEpisodeNumber} has an invalid empty video file.`);
+      return;
+    }
+
+    if (oversizedVideoEpisodeNumber !== null) {
+      toastError(`Episode ${oversizedVideoEpisodeNumber} video is too large (max ${MAX_VIDEO_BYTES / 1024 / 1024 / 1024}GB)`);
+      return;
     }
 
     setIsUploading(true);
@@ -145,8 +220,10 @@ export default function SeriesUploadPage() {
     setUploadStats(null);
     setCurrentEpisodeIndex(0);
     abortControllerRef.current = new AbortController();
+    lastProgressUpdateRef.current = 0;
 
     try {
+      const abortSignal = abortControllerRef.current.signal;
       const freeEpisodesCount =
         seriesAccess === "membership"
           ? episodes.filter((ep) => ep.isFreePreview).length
@@ -158,6 +235,7 @@ export default function SeriesUploadPage() {
       const initRes = await fetch("/api/movies/series-multipart-init", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: abortSignal,
         body: JSON.stringify({
           title: title.trim(),
           title_kh: titleKh.trim() || null,
@@ -205,6 +283,7 @@ export default function SeriesUploadPage() {
       const thumbnailPromise = fetch(thumbnail.uploadUrl, {
         method: "PUT",
         headers: { "Content-Type": thumbnailFile.type },
+        signal: abortSignal,
         body: thumbnailFile,
       });
 
@@ -238,9 +317,17 @@ export default function SeriesUploadPage() {
           file: ep.videoFile!,
           partUrls: epInit.partUrls,
           partSize: epInit.partSize,
-          concurrency: 8,
+          concurrency: uploadConcurrency,
           abortSignal: abortControllerRef.current.signal,
           onProgress: (progress) => {
+              const now = Date.now();
+              const shouldUpdate =
+                now - lastProgressUpdateRef.current >= PROGRESS_UPDATE_INTERVAL_MS ||
+                progress.percentage >= 100;
+              if (!shouldUpdate) return;
+
+              lastProgressUpdateRef.current = now;
+
             // Overall progress: current episode's progress added to prior episodes
             const episodeOffset =
               (uploadedBeforeCurrentEpisode / totalVideoBytes) * 90;
@@ -281,6 +368,7 @@ export default function SeriesUploadPage() {
       const completeRes = await fetch("/api/movies/series-multipart-complete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: abortSignal,
         body: JSON.stringify({
           movieId,
           thumbnailKey: thumbnail.key,
@@ -304,6 +392,7 @@ export default function SeriesUploadPage() {
       if (uploadMetaRef.current) {
         fetch("/api/movies/series-multipart-complete", {
           method: "DELETE",
+          keepalive: true,
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             movieId: uploadMetaRef.current.movieId,
@@ -341,140 +430,43 @@ export default function SeriesUploadPage() {
         </div>
       </div>
 
-      {/* Step indicator */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2">
-        {STEPS.map((s, i) => (
-          <div key={s.id} className="flex items-center shrink-0">
-            <button
-              type="button"
-              onClick={() => setStep(s.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                step === s.id
-                  ? "bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/30"
-                  : step > s.id
-                    ? "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
-                    : "text-slate-500 dark:text-slate-600"
-              }`}
-            >
-              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${step >= s.id ? "bg-red-500/30 text-red-600 dark:text-red-400" : "bg-slate-200 dark:bg-slate-700"}`}>
-                {s.id}
-              </span>
-              {s.title}
-            </button>
-            {i < STEPS.length - 1 && (
-              <svg className="w-4 h-4 text-slate-400 mx-1 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            )}
-          </div>
-        ))}
-      </div>
+      <StepIndicator step={step} onStepChange={setStep} />
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Step 1: Access */}
         {step === 1 && (
-          <Card>
-            <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-4">Step 1: Access</h3>
-            <p className="text-slate-600 dark:text-slate-400 mb-6">How will users watch this series?</p>
-            <div className="flex gap-4">
-              <button
-                type="button"
-                onClick={() => setSeriesAccess("membership")}
-                className={`flex-1 p-6 rounded-xl border-2 text-left transition-all ${
-                  seriesAccess === "membership"
-                    ? "border-red-500 bg-red-500/10 text-slate-900 dark:text-white"
-                    : "border-slate-300 dark:border-slate-700 hover:border-slate-400 text-slate-600 dark:text-slate-400"
-                }`}
-              >
-                <span className="font-semibold block">Subscribers only</span>
-                <span className="text-sm mt-1 block">Only users with an active subscription (any plan) can watch. Mark which episodes are free to preview in Step 3.</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setSeriesAccess("free")}
-                className={`flex-1 p-6 rounded-xl border-2 text-left transition-all ${
-                  seriesAccess === "free"
-                    ? "border-red-500 bg-red-500/10 text-slate-900 dark:text-white"
-                    : "border-slate-300 dark:border-slate-700 hover:border-slate-400 text-slate-600 dark:text-slate-400"
-                }`}
-              >
-                <span className="font-semibold block">Free for all</span>
-                <span className="text-sm mt-1 block">No subscription needed. Everyone can watch all episodes.</span>
-              </button>
-            </div>
-          </Card>
+          <StepAccessCard
+            seriesAccess={seriesAccess}
+            onSeriesAccessChange={setSeriesAccess}
+          />
         )}
 
         {/* Step 2: Details */}
         {step === 2 && (
-          <Card>
-            <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-4">Step 2: Series Details</h3>
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Input label="Title (English)" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Series title" required />
-                <Input label="Title (Khmer)" value={titleKh} onChange={(e) => setTitleKh(e.target.value)} placeholder="ឈ្មោះស៊េរី" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Cover image</label>
-                <div
-                  onDragOver={(e) => { e.preventDefault(); setIsDraggingThumbnail(true); }}
-                  onDragLeave={() => setIsDraggingThumbnail(false)}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    setIsDraggingThumbnail(false);
-                    const f = e.dataTransfer.files[0];
-                    if (f?.type.startsWith("image/")) setThumbnailFile(f);
-                  }}
-                  onClick={() => thumbnailRef.current?.click()}
-                  className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
-                    thumbnailFile ? "border-emerald-500/50 bg-emerald-500/10" : isDraggingThumbnail ? "border-red-500 bg-red-500/10" : "border-slate-300 dark:border-slate-700 hover:border-slate-400"
-                  }`}
-                >
-                  <input
-                    ref={thumbnailRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    className="hidden"
-                    onChange={(e) => setThumbnailFile(e.target.files?.[0] ?? null)}
-                  />
-                  {thumbnailFile ? (
-                    <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">{thumbnailFile.name}</p>
-                  ) : (
-                    <>
-                      <svg className="w-10 h-10 mx-auto text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                      <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Drop cover image or click (JPG, PNG, WebP)</p>
-                    </>
-                  )}
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Description</label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Brief description of the series"
-                  rows={4}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500 resize-none"
-                />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Select label="Genre" options={GENRE_OPTIONS} value={genre} onChange={(e) => setGenre(e.target.value)} placeholder="Select genre" />
-                <CastInput label="Cast" value={cast} onChange={setCast} placeholder="Actor name" />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Input label="Release Date" type="date" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)} />
-                <Input label="Duration (avg min/episode)" type="number" value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="45" />
-              </div>
-              <Select
-                label="Status"
-                options={[{ value: "draft", label: "Draft" }, { value: "published", label: "Published" }]}
-                value={status}
-                onChange={(e) => setStatus(e.target.value as "draft" | "published")}
-              />
-            </div>
-          </Card>
+          <StepDetailsCard
+            title={title}
+            onTitleChange={setTitle}
+            titleKh={titleKh}
+            onTitleKhChange={setTitleKh}
+            description={description}
+            onDescriptionChange={setDescription}
+            genre={genre}
+            onGenreChange={setGenre}
+            cast={cast}
+            onCastChange={setCast}
+            releaseDate={releaseDate}
+            onReleaseDateChange={setReleaseDate}
+            duration={duration}
+            onDurationChange={setDuration}
+            status={status}
+            onStatusChange={setStatus}
+            thumbnailFile={thumbnailFile}
+            isDraggingThumbnail={isDraggingThumbnail}
+            thumbnailRef={thumbnailRef}
+            onThumbnailDragOver={handleThumbnailDragOver}
+            onThumbnailDragLeave={handleThumbnailDragLeave}
+            onThumbnailDrop={handleThumbnailDrop}
+            onThumbnailFileChange={handleThumbnailFileChange}
+          />
         )}
 
         {/* Step 3: Episodes */}
@@ -507,43 +499,14 @@ export default function SeriesUploadPage() {
             ) : (
               <div className="space-y-4">
                 {episodes.map((ep) => (
-                  <div
+                  <EpisodeRow
                     key={ep.id}
-                    className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700"
-                  >
-                    <div className="flex items-start justify-between gap-4 mb-3">
-                      <span className="text-sm font-medium text-slate-600 dark:text-slate-400 shrink-0">Episode {ep.episodeNumber}</span>
-                      <button type="button" onClick={() => removeEpisode(ep.id)} className="text-slate-500 hover:text-red-400 text-sm">
-                        Remove
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <Input label="Title" value={ep.title} onChange={(e) => updateEpisode(ep.id, { title: e.target.value })} placeholder={`Episode ${ep.episodeNumber}`} />
-                      <Input label="Duration (min)" type="number" value={ep.duration} onChange={(e) => updateEpisode(ep.id, { duration: e.target.value })} placeholder="45" />
-                    </div>
-                    {seriesAccess === "membership" && (
-                      <label className="mt-4 flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={ep.isFreePreview ?? false}
-                          onChange={(e) => updateEpisode(ep.id, { isFreePreview: e.target.checked })}
-                          className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-red-500 focus:ring-red-500/50"
-                        />
-                        <span className="text-sm text-slate-700 dark:text-slate-300">Free preview (watchable without membership)</span>
-                      </label>
-                    )}
-                    <div className="mt-4">
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Video File</label>
-                      <label className={`block border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${ep.videoFile ? "border-emerald-500/50 bg-emerald-500/10" : "border-slate-300 dark:border-slate-600 hover:border-slate-400"}`}>
-                        <input type="file" accept="video/mp4,video/webm,video/quicktime" className="hidden" onChange={(e) => handleEpisodeFileChange(ep.id, e.target.files?.[0] ?? null)} />
-                        {ep.videoFile ? (
-                          <span className="text-sm text-emerald-600 dark:text-emerald-400">{ep.videoFile.name} ({formatBytes(ep.videoFile.size)})</span>
-                        ) : (
-                          <span className="text-sm text-slate-500">Select video (MP4, WebM, MOV)</span>
-                        )}
-                      </label>
-                    </div>
-                  </div>
+                    ep={ep}
+                    seriesAccess={seriesAccess}
+                    onRemoveEpisode={removeEpisode}
+                    onUpdateEpisode={updateEpisode}
+                    onEpisodeFileChange={handleEpisodeFileChange}
+                  />
                 ))}
               </div>
             )}
@@ -552,56 +515,17 @@ export default function SeriesUploadPage() {
 
         {/* Step 4: Review */}
         {step === 4 && (
-          <Card>
-            <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-4">Step 4: Review</h3>
-            <div className="space-y-6">
-              {thumbnailFile && (
-                <div>
-                  <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Cover image</p>
-                  <div className="w-24 aspect-2/3 rounded-lg bg-slate-100 dark:bg-slate-800 overflow-hidden border border-slate-200 dark:border-slate-700">
-                    <img
-                      src={URL.createObjectURL(thumbnailFile)}
-                      alt="Cover"
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                </div>
-              )}
-              <div>
-                <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Access</p>
-                <p className="font-medium text-slate-900 dark:text-white">{seriesAccess === "membership" ? "Subscribers only" : "Free for all"}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Series</p>
-                <p className="font-medium text-slate-900 dark:text-white">{title || "—"}</p>
-                {titleKh && <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">{titleKh}</p>}
-                {description && <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{description.slice(0, 100)}{description.length > 100 ? "…" : ""}</p>}
-              </div>
-              {(cast || genre) && (
-                <div>
-                  <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Info</p>
-                  <p className="text-sm text-slate-900 dark:text-white">{[genre, cast].filter(Boolean).join(" • ")}</p>
-                </div>
-              )}
-              <div>
-                <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Episodes</p>
-                <p className="font-medium text-slate-900 dark:text-white">{episodes.length} episode{episodes.length !== 1 ? "s" : ""}</p>
-                {seriesAccess === "membership" && (
-                  <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-                    {episodes.filter((e) => e.isFreePreview).length} free preview
-                  </p>
-                )}
-                <div className="mt-2 space-y-1">
-                  {episodes.map((ep) => (
-                    <p key={ep.id} className="text-xs text-slate-500 dark:text-slate-400">
-                      EP{ep.episodeNumber} — {ep.title || `Episode ${ep.episodeNumber}`}
-                      {ep.videoFile ? ` · ${formatBytes(ep.videoFile.size)}` : ""}
-                    </p>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </Card>
+          <StepReviewCard
+            thumbnailFile={thumbnailFile}
+            thumbnailPreviewUrl={thumbnailPreviewUrl}
+            seriesAccess={seriesAccess}
+            title={title}
+            titleKh={titleKh}
+            description={description}
+            cast={cast}
+            genre={genre}
+            episodes={episodes}
+          />
         )}
 
         <div className="flex gap-3">
@@ -626,113 +550,16 @@ export default function SeriesUploadPage() {
         </div>
       </form>
 
-      {/* ── Upload progress modal ──────────────────────────────────────────── */}
-      {isUploading && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          {/* Backdrop */}
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-
-          {/* Modal card */}
-          <div className="relative w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-
-            {/* Animated top progress stripe */}
-            <div className="h-1 w-full bg-slate-200 dark:bg-slate-700">
-              <div
-                className="h-full bg-linear-to-r from-red-500 via-rose-400 to-red-600 transition-all duration-200 ease-linear"
-                style={{ width: `${uploadProgress}%` }}
-              />
-            </div>
-
-            <div className="p-6 space-y-5">
-              {/* Header */}
-              <div className="flex items-start gap-4">
-                <div className="shrink-0 w-12 h-12 rounded-xl bg-red-500/10 dark:bg-red-500/20 flex items-center justify-center">
-                  <svg
-                    className="w-6 h-6 text-red-500 animate-pulse"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                  </svg>
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">
-                    Uploading — {title}
-                  </p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    {uploadProgress < 90
-                      ? currentEpisodeIndex > 0
-                        ? `Episode ${currentEpisodeIndex} of ${episodes.length}…`
-                        : "Preparing…"
-                      : uploadProgress < 95
-                        ? "Finalizing thumbnail…"
-                        : uploadProgress < 100
-                          ? "Saving to database…"
-                          : "Complete!"}
-                  </p>
-                </div>
-                <span className="shrink-0 text-2xl font-bold tabular-nums text-red-500">
-                  {uploadProgress}%
-                </span>
-              </div>
-
-              {/* Progress bar */}
-              <div className="space-y-1.5">
-                <div className="h-2.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-linear-to-r from-red-500 to-rose-500 transition-all duration-200 ease-linear"
-                    style={{ width: `${uploadProgress}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* Stats grid */}
-              {uploadStats && (
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="rounded-xl bg-slate-50 dark:bg-slate-800 px-3 py-2.5 text-center">
-                    <p className="text-xs text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">Speed</p>
-                    <p className="text-sm font-semibold text-slate-900 dark:text-white tabular-nums">
-                      {formatSpeed(uploadStats.speed)}
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-slate-50 dark:bg-slate-800 px-3 py-2.5 text-center">
-                    <p className="text-xs text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">Done</p>
-                    <p className="text-sm font-semibold text-slate-900 dark:text-white tabular-nums">
-                      {formatBytes(uploadStats.uploadedBytes)}
-                    </p>
-                    <p className="text-xs text-slate-400 dark:text-slate-500 tabular-nums">
-                      / {formatBytes(uploadStats.totalBytes)}
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-slate-50 dark:bg-slate-800 px-3 py-2.5 text-center">
-                    <p className="text-xs text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">ETA</p>
-                    <p className="text-sm font-semibold text-slate-900 dark:text-white tabular-nums">
-                      {uploadStats.eta > 0 ? formatTime(uploadStats.eta) : "—"}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Chunk + episode counter */}
-              {uploadStats && (
-                <p className="text-xs text-slate-400 dark:text-slate-500 text-center">
-                  Chunk {uploadStats.currentParts} / {uploadStats.totalParts} · 8 parallel connections
-                </p>
-              )}
-
-              {/* Cancel */}
-              <button
-                type="button"
-                onClick={handleCancelUpload}
-                className="w-full py-2.5 rounded-xl text-sm font-medium text-red-500 border border-red-200 dark:border-red-500/20 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
-              >
-                Cancel Upload
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <UploadProgressModal
+        isUploading={isUploading}
+        uploadProgress={uploadProgress}
+        title={title}
+        currentEpisodeIndex={currentEpisodeIndex}
+        episodesLength={episodes.length}
+        uploadStats={uploadStats}
+        uploadConcurrency={uploadConcurrency}
+        onCancelUpload={handleCancelUpload}
+      />
     </div>
   );
 }

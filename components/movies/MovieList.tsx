@@ -3,14 +3,23 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Spinner } from "@/components/ui/Spinner";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { toastError, toastSuccess } from "@/lib/toast";
 import type { Movie, MovieStatus } from "@/types";
+import { ChevronLeft, ChevronRight, Film, Pencil, Trash2, Video } from "lucide-react";
 
 interface MovieListProps {
   movies: Movie[];
   isLoading: boolean;
   onDelete?: (id: string) => void;
   variant?: "single" | "series";
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  hasPreviousPage: boolean;
+  hasNextPage: boolean;
+  onPageChange: (page: number) => void;
 }
 
 function formatDate(dateStr: string | null): string {
@@ -25,15 +34,18 @@ function formatDuration(mins: number | null): string {
   return `${Math.floor(mins / 60)}h ${mins % 60}m`;
 }
 
-const STATUS_STYLES: Record<MovieStatus | "uploading", string> = {
+type MovieDisplayStatus = MovieStatus | "uploading";
+type PageItem = number | "ellipsis-left" | "ellipsis-right";
+
+const STATUS_STYLES: Record<MovieDisplayStatus, string> = {
   published: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 ring-1 ring-emerald-500/25",
   draft:     "bg-slate-500/10  text-slate-500  dark:text-slate-400  ring-1 ring-slate-500/20",
   archived:  "bg-amber-500/15  text-amber-600  dark:text-amber-400  ring-1 ring-amber-500/25",
   uploading: "bg-blue-500/15   text-blue-600   dark:text-blue-400   ring-1 ring-blue-500/25",
 };
 
-function StatusBadge({ status }: { status: string }) {
-  const style = STATUS_STYLES[status as MovieStatus] ?? STATUS_STYLES.draft;
+function StatusBadge({ status }: { status: MovieDisplayStatus }) {
+  const style = STATUS_STYLES[status] ?? STATUS_STYLES.draft;
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium capitalize ${style}`}>
       {status}
@@ -41,80 +53,45 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function TrashIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-    </svg>
-  );
-}
+function buildPageItems(currentPage: number, totalPages: number): PageItem[] {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, i) => i + 1);
+  }
 
-function PencilIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-    </svg>
-  );
-}
+  if (currentPage <= 4) {
+    return [1, 2, 3, 4, 5, "ellipsis-right", totalPages];
+  }
 
-// ── Confirmation modal ─────────────────────────────────────────────────────────
+  if (currentPage >= totalPages - 3) {
+    return [1, "ellipsis-left", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+  }
 
-interface DeleteModalProps {
-  movie: Movie;
-  isDeleting: boolean;
-  onConfirm: () => void;
-  onCancel: () => void;
-}
-
-function DeleteModal({ movie, isDeleting, onConfirm, onCancel }: DeleteModalProps) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
-      <div className="relative w-full max-w-sm rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl p-6 space-y-4">
-        {/* Icon */}
-        <div className="w-12 h-12 rounded-xl bg-red-500/10 flex items-center justify-center mx-auto">
-          <svg className="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-        </div>
-
-        {/* Copy */}
-        <div className="text-center space-y-1">
-          <h3 className="text-base font-semibold text-slate-900 dark:text-white">Delete movie?</h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            <span className="font-medium text-slate-700 dark:text-slate-300">{movie.title}</span> will be
-            permanently deleted. This cannot be undone.
-          </p>
-        </div>
-
-        {/* Buttons */}
-        <div className="flex gap-3 pt-1">
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={isDeleting}
-            className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            disabled={isDeleting}
-            className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-red-500 hover:bg-red-600 text-white transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-            {isDeleting ? <Spinner size="sm" /> : <TrashIcon />}
-            {isDeleting ? "Deleting…" : "Delete"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+  return [
+    1,
+    "ellipsis-left",
+    currentPage - 1,
+    currentPage,
+    currentPage + 1,
+    "ellipsis-right",
+    totalPages,
+  ];
 }
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export function MovieList({ movies, isLoading, onDelete, variant = "single" }: MovieListProps) {
+export function MovieList({
+  movies,
+  isLoading,
+  onDelete,
+  variant = "single",
+  page,
+  pageSize,
+  total,
+  totalPages,
+  hasPreviousPage,
+  hasNextPage,
+  onPageChange,
+}: MovieListProps) {
   const router = useRouter();
   const [pendingDelete, setPendingDelete] = useState<Movie | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -149,9 +126,7 @@ export function MovieList({ movies, isLoading, onDelete, variant = "single" }: M
   if (movies.length === 0) {
     return (
       <div className="text-center py-20 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/30">
-        <svg className="w-10 h-10 mx-auto text-slate-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
-        </svg>
+        <Film className="w-10 h-10 mx-auto text-slate-400 mb-3" />
         <p className="text-slate-600 dark:text-slate-300 font-medium">
           {variant === "series" ? "No series found" : "No movies found"}
         </p>
@@ -164,6 +139,10 @@ export function MovieList({ movies, isLoading, onDelete, variant = "single" }: M
     );
   }
 
+  const start = (page - 1) * pageSize + 1;
+  const end = Math.min(page * pageSize, total);
+  const pageItems = buildPageItems(page, totalPages);
+
   return (
     <>
       <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -171,10 +150,10 @@ export function MovieList({ movies, isLoading, onDelete, variant = "single" }: M
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-700">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-[240px]">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-60">
                   Title
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-[180px]">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-45">
                   Khmer Title
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
@@ -217,20 +196,18 @@ export function MovieList({ movies, isLoading, onDelete, variant = "single" }: M
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-slate-400">
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                            </svg>
+                            <Video className="w-4 h-4" />
                           </div>
                         )}
                       </div>
-                      <span className="font-medium text-slate-900 dark:text-white truncate max-w-[180px] group-hover:text-red-500 dark:group-hover:text-red-400 transition-colors">
+                      <span className="font-medium text-slate-900 dark:text-white truncate max-w-45 group-hover:text-red-500 dark:group-hover:text-red-400 transition-colors">
                         {movie.title}
                       </span>
                     </div>
                   </td>
 
                   {/* Khmer title */}
-                  <td className="px-4 py-3 text-slate-500 dark:text-slate-400 max-w-[180px] truncate">
+                  <td className="px-4 py-3 text-slate-500 dark:text-slate-400 max-w-45 truncate">
                     {movie.title_kh ?? "—"}
                   </td>
 
@@ -279,7 +256,7 @@ export function MovieList({ movies, isLoading, onDelete, variant = "single" }: M
                         className="p-1.5 rounded-lg text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors"
                         title="Edit"
                       >
-                        <PencilIcon />
+                        <Pencil className="w-4 h-4" />
                       </button>
                       <button
                         type="button"
@@ -287,7 +264,7 @@ export function MovieList({ movies, isLoading, onDelete, variant = "single" }: M
                         className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
                         title="Delete"
                       >
-                        <TrashIcon />
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   </td>
@@ -298,22 +275,80 @@ export function MovieList({ movies, isLoading, onDelete, variant = "single" }: M
         </div>
 
         {/* Row count footer */}
-        <div className="px-4 py-2.5 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40">
+        <div className="px-4 py-2.5 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 flex items-center justify-between gap-3">
           <p className="text-xs text-slate-400 dark:text-slate-500">
-            {movies.length} {variant === "series"
-              ? movies.length === 1 ? "series" : "series"
-              : movies.length === 1 ? "movie" : "movies"}
+            Showing {start}-{end} of {total} {variant === "series" ? "series" : "movies"}
           </p>
+
+          {totalPages > 1 && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => onPageChange(page - 1)}
+                disabled={!hasPreviousPage}
+                className="inline-flex items-center gap-1 rounded-md border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                Prev
+              </button>
+
+              <div className="flex items-center gap-1">
+                {pageItems.map((item, index) => {
+                  if (typeof item !== "number") {
+                    return (
+                      <span
+                        key={`${item}-${index}`}
+                        className="px-2 py-1 text-xs text-slate-400 dark:text-slate-500"
+                      >
+                        ...
+                      </span>
+                    );
+                  }
+
+                  const isActive = item === page;
+                  return (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => onPageChange(item)}
+                      className={`min-w-8 rounded-md px-2 py-1.5 text-xs border transition-colors ${
+                        isActive
+                          ? "border-red-500 bg-red-500 text-white"
+                          : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                      }`}
+                    >
+                      {item}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => onPageChange(page + 1)}
+                disabled={!hasNextPage}
+                className="inline-flex items-center gap-1 rounded-md border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Delete confirmation modal */}
       {pendingDelete && (
-        <DeleteModal
-          movie={pendingDelete}
-          isDeleting={isDeleting}
+        <ConfirmDialog
+          isOpen={Boolean(pendingDelete)}
+          onClose={() => !isDeleting && setPendingDelete(null)}
           onConfirm={handleDeleteConfirm}
-          onCancel={() => !isDeleting && setPendingDelete(null)}
+          title="Delete movie?"
+          description={`\"${pendingDelete.title}\" will be permanently deleted. This cannot be undone.`}
+          confirmLabel="Delete"
+          cancelLabel="Cancel"
+          variant="danger"
+          isLoading={isDeleting}
         />
       )}
     </>

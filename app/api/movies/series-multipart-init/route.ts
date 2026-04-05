@@ -8,6 +8,7 @@ import { generatePresignedUploadUrl } from "@/lib/r2/presigned";
 import { requireAuth } from "@/lib/auth/requireAuth";
 import { createLogger } from "@/lib/logger";
 import {
+  getExtension,
   ALLOWED_VIDEO_TYPES,
   ALLOWED_IMAGE_TYPES,
   MAX_VIDEO_BYTES,
@@ -92,6 +93,12 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+    if (!Number.isFinite(Number(ep.videoSize)) || Number(ep.videoSize) <= 0) {
+      return NextResponse.json(
+        { error: `Episode ${ep.episodeNumber}: video size must be greater than 0` },
+        { status: 400 }
+      );
+    }
     if (Number(ep.videoSize) > MAX_VIDEO_BYTES) {
       return NextResponse.json(
         { error: `Episode ${ep.episodeNumber}: video too large (max ${MAX_VIDEO_BYTES / 1024 / 1024 / 1024}GB)` },
@@ -141,7 +148,8 @@ export async function POST(request: NextRequest) {
 
   try {
     // Thumbnail presigned URL
-    const thumbnailKey = `movies/${movieId}/thumbnail.jpg`;
+    const thumbnailExt = getExtension(thumbnailType, "jpg");
+    const thumbnailKey = `movies/${movieId}/thumbnail.${thumbnailExt}`;
     const thumbnail = await generatePresignedUploadUrl(thumbnailKey, thumbnailType);
 
     // One multipart upload per episode

@@ -3,22 +3,20 @@
 import { Select } from "@/components/ui/Select";
 
 interface PaymentFiltersProps {
-  status: string;
-  onStatusChange: (status: string) => void;
+  descriptionType: string;
+  onDescriptionTypeChange: (descriptionType: string) => void;
 }
 
-export function PaymentFilters({ status, onStatusChange }: PaymentFiltersProps) {
+export function PaymentFilters({ descriptionType, onDescriptionTypeChange }: PaymentFiltersProps) {
   return (
     <Select
       options={[
-        { value: "", label: "All statuses" },
-        { value: "pending", label: "Pending" },
-        { value: "completed", label: "Completed" },
-        { value: "failed", label: "Failed" },
-        { value: "refunded", label: "Refunded" },
+        { value: "", label: "All descriptions" },
+        { value: "movie", label: "Movie" },
+        { value: "subscription", label: "Subscription" },
       ]}
-      value={status}
-      onChange={(e) => onStatusChange(e.target.value)}
+      value={descriptionType}
+      onChange={(e) => onDescriptionTypeChange(e.target.value)}
       className="w-full sm:w-48"
     />
   );

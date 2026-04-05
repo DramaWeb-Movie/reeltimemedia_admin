@@ -6,19 +6,23 @@ import { Button } from "@/components/ui/Button";
 import { MovieFilters } from "@/components/movies/MovieFilters";
 import { MovieList } from "@/components/movies/MovieList";
 import { useMovies } from "@/hooks/useMovies";
-
-function UploadIcon() {
-  return (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-    </svg>
-  );
-}
+import { Plus } from "lucide-react";
 
 export default function SingleMoviesPage() {
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
-  const { movies, isLoading, removeById } = useMovies({
+  const {
+    movies,
+    isLoading,
+    removeById,
+    page,
+    pageSize,
+    total,
+    totalPages,
+    hasPreviousPage,
+    hasNextPage,
+    setPage,
+  } = useMovies({
     type: "single",
     status: status || undefined,
     search: search || undefined,
@@ -42,7 +46,7 @@ export default function SingleMoviesPage() {
           </p>
         </div>
         <Link href="/upload/single" className="shrink-0">
-          <Button leftIcon={<UploadIcon />}>Add Movie</Button>
+          <Button leftIcon={<Plus className="w-5 h-5" />}>Add Movie</Button>
         </Link>
       </div>
 
@@ -56,8 +60,19 @@ export default function SingleMoviesPage() {
         showTypeFilter={false}
       />
 
-      <div className="min-h-[320px]">
-        <MovieList movies={movies} isLoading={isLoading} onDelete={removeById} />
+      <div className="min-h-80">
+        <MovieList
+          movies={movies}
+          isLoading={isLoading}
+          onDelete={removeById}
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          totalPages={totalPages}
+          hasPreviousPage={hasPreviousPage}
+          hasNextPage={hasNextPage}
+          onPageChange={setPage}
+        />
       </div>
     </div>
   );

@@ -9,9 +9,9 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { CastInput } from "@/components/ui/CastInput";
 import { Spinner } from "@/components/ui/Spinner";
-import { Modal } from "@/components/ui/Modal";
-import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { Badge } from "@/components/ui/Badge";
+import { SinglePricingSection } from "@/components/movies/edit/SinglePricingSection";
+import { SeriesAccessSection } from "@/components/movies/edit/SeriesAccessSection";
+import { SeriesEpisodesPanel } from "@/components/movies/edit/SeriesEpisodesPanel";
 import { GENRE_OPTIONS } from "@/lib/constants/genres";
 import { toastError, toastSuccess } from "@/lib/toast";
 import {
@@ -22,19 +22,9 @@ import {
   type UploadProgress,
 } from "@/lib/upload/parallel-uploader";
 import { MAX_VIDEO_BYTES, MAX_IMAGE_BYTES } from "@/lib/r2/mime";
+import type { SeriesEpisode } from "@/components/movies/edit/types";
 import type { Movie } from "@/types";
 import type { SubscriptionPlan } from "@/types";
-
-interface SeriesEpisode {
-  id: string;
-  movie_id: string;
-  episode_number: number;
-  title: string;
-  duration: number | null;
-  video_url: string | null;
-  is_free_preview: boolean;
-  created_at: string;
-}
 
 export default function EditMoviePage() {
   const params = useParams();
@@ -384,7 +374,7 @@ export default function EditMoviePage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex items-center justify-center min-h-100">
         <Spinner size="lg" />
       </div>
     );
@@ -419,7 +409,7 @@ export default function EditMoviePage() {
               {movie.type === "series" ? "Series" : "Single"}
             </Link>
             <span>/</span>
-            <span className="text-slate-900 dark:text-white font-medium truncate max-w-[160px]">{movie.title}</span>
+            <span className="text-slate-900 dark:text-white font-medium truncate max-w-40">{movie.title}</span>
           </nav>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Edit movie</h1>
         </div>
@@ -480,7 +470,7 @@ export default function EditMoviePage() {
                 <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Thumbnail</p>
                 <div className="flex gap-3 items-start">
                   <div
-                    className="shrink-0 w-14 aspect-[2/3] rounded-lg overflow-hidden border-2 border-dashed border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 cursor-pointer hover:border-red-400 transition-colors"
+                    className="shrink-0 w-14 aspect-2/3 rounded-lg overflow-hidden border-2 border-dashed border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 cursor-pointer hover:border-red-400 transition-colors"
                     onClick={() => thumbnailInputRef.current?.click()}
                   >
                     {newThumbnailFile ? (
@@ -548,77 +538,54 @@ export default function EditMoviePage() {
 
           {/* Pricing / Series access */}
           {movie.type === "single" ? (
-              <Card padding="lg">
-                <CardHeader title="Pricing" subtitle="One-time purchase price in USD." />
-                <div className="mt-1">
-                  <Input label="Price (USD)" type="number" step="0.01" min="0.01" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="2.99" />
-                </div>
-              </Card>
-            ) : (
-              <Card padding="lg">
-                <CardHeader title="Series access" subtitle="Subscription and free preview settings." />
-                <div className="mt-1 space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Input label="Free episodes (count)" type="number" min="0" value={freeEpisodesCount} onChange={(e) => setFreeEpisodesCount(e.target.value)} placeholder="0" />
-                    <Input label="Total episodes" type="number" min="0" value={totalEpisodes} onChange={(e) => setTotalEpisodes(e.target.value)} placeholder="—" />
-                  </div>
-                  <Select label="Restrict to plan (optional)" options={planOptions} value={subscriptionPlanId} onChange={(e) => setSubscriptionPlanId(e.target.value)} />
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Leave &quot;No plan&quot; for any subscriber.</p>
-                </div>
-              </Card>
-            )}
+            <SinglePricingSection price={price} setPrice={setPrice} />
+          ) : (
+            <SeriesAccessSection
+              freeEpisodesCount={freeEpisodesCount}
+              setFreeEpisodesCount={setFreeEpisodesCount}
+              totalEpisodes={totalEpisodes}
+              setTotalEpisodes={setTotalEpisodes}
+              subscriptionPlanId={subscriptionPlanId}
+              setSubscriptionPlanId={setSubscriptionPlanId}
+              planOptions={planOptions}
+            />
+          )}
 
           {/* Episodes (series only) */}
           {movie.type === "series" && (
-            <Card padding="lg">
-              <CardHeader
-                title="Episodes"
-                subtitle={`${episodes.length} episode${episodes.length !== 1 ? "s" : ""}`}
-                action={<Button type="button" size="sm" onClick={() => setShowAddEpisode(true)}>+ Add episode</Button>}
-              />
-              {episodesLoading ? (
-                <div className="py-10 flex justify-center"><Spinner size="md" /></div>
-              ) : episodes.length === 0 ? (
-                <div className="mt-2 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 py-10 text-center">
-                  <p className="text-sm text-slate-500 dark:text-slate-400">No episodes yet.</p>
-                  <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => setShowAddEpisode(true)}>Add first episode</Button>
-                </div>
-              ) : (
-                <div className="mt-2 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-                  <div className="max-h-80 overflow-y-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-slate-50 dark:bg-slate-800/80 sticky top-0 z-10">
-                        <tr>
-                          <th className="text-left py-2.5 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 w-10">#</th>
-                          <th className="text-left py-2.5 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400">Title</th>
-                          <th className="text-left py-2.5 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 w-20">Duration</th>
-                          <th className="text-left py-2.5 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 w-16">Free</th>
-                          <th className="w-28 py-2.5 px-4" />
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                        {episodes.map((ep) => (
-                          <tr key={ep.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors">
-                            <td className="py-2.5 px-4 font-medium text-slate-900 dark:text-white text-xs">{ep.episode_number}</td>
-                            <td className="py-2.5 px-4 text-slate-700 dark:text-slate-300">{ep.title || `Episode ${ep.episode_number}`}</td>
-                            <td className="py-2.5 px-4 text-slate-500 dark:text-slate-400 text-xs">{ep.duration != null ? `${ep.duration}m` : "—"}</td>
-                            <td className="py-2.5 px-4">{ep.is_free_preview ? <Badge variant="success">Yes</Badge> : <span className="text-slate-400 text-xs">—</span>}</td>
-                            <td className="py-2.5 px-4">
-                              <div className="flex gap-1.5">
-                                <Button type="button" variant="ghost" size="sm" onClick={() => openEditEpisode(ep)}>Edit</Button>
-                                <Button type="button" variant="ghost" size="sm" onClick={() => setDeleteConfirmEpisode(ep)} disabled={deletingEpisodeId === ep.id} className="text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40">
-                                  {deletingEpisodeId === ep.id ? "…" : "Delete"}
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </Card>
+            <SeriesEpisodesPanel
+              episodes={episodes}
+              episodesLoading={episodesLoading}
+              deletingEpisodeId={deletingEpisodeId}
+              onOpenAddEpisode={() => setShowAddEpisode(true)}
+              onOpenEditEpisode={openEditEpisode}
+              onRequestDeleteEpisode={setDeleteConfirmEpisode}
+              editingEpisode={editingEpisode}
+              setEditingEpisode={setEditingEpisode}
+              editEpisodeTitle={editEpisodeTitle}
+              setEditEpisodeTitle={setEditEpisodeTitle}
+              editEpisodeDuration={editEpisodeDuration}
+              setEditEpisodeDuration={setEditEpisodeDuration}
+              editEpisodeFree={editEpisodeFree}
+              setEditEpisodeFree={setEditEpisodeFree}
+              setEditEpisodeVideo={setEditEpisodeVideo}
+              savingEpisode={savingEpisode}
+              onSaveEpisodeEdit={saveEpisodeEdit}
+              showAddEpisode={showAddEpisode}
+              setShowAddEpisode={setShowAddEpisode}
+              addEpisodeTitle={addEpisodeTitle}
+              setAddEpisodeTitle={setAddEpisodeTitle}
+              addEpisodeDuration={addEpisodeDuration}
+              setAddEpisodeDuration={setAddEpisodeDuration}
+              addEpisodeFree={addEpisodeFree}
+              setAddEpisodeFree={setAddEpisodeFree}
+              setAddEpisodeVideo={setAddEpisodeVideo}
+              addingEpisode={addingEpisode}
+              onAddEpisodeSubmit={addEpisodeSubmit}
+              deleteConfirmEpisode={deleteConfirmEpisode}
+              setDeleteConfirmEpisode={setDeleteConfirmEpisode}
+              onConfirmDeleteEpisode={confirmDeleteEpisode}
+            />
           )}
         </div>
 
@@ -656,126 +623,6 @@ export default function EditMoviePage() {
       </div>
       </form>
 
-    {/* Edit episode modal */}
-      <Modal
-        isOpen={!!editingEpisode}
-        onClose={() => setEditingEpisode(null)}
-        title={editingEpisode ? `Edit Episode ${editingEpisode.episode_number}` : ""}
-        size="md"
-      >
-        {editingEpisode && (
-          <form onSubmit={saveEpisodeEdit} className="space-y-5">
-            <Input
-              label="Title"
-              value={editEpisodeTitle}
-              onChange={(e) => setEditEpisodeTitle(e.target.value)}
-              placeholder={`Episode ${editingEpisode.episode_number}`}
-            />
-            <Input
-              label="Duration (min)"
-              type="number"
-              min="0"
-              value={editEpisodeDuration}
-              onChange={(e) => setEditEpisodeDuration(e.target.value)}
-              placeholder="—"
-            />
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={editEpisodeFree}
-                onChange={(e) => setEditEpisodeFree(e.target.checked)}
-                className="rounded border-slate-300 dark:border-slate-600 text-red-500 focus:ring-red-500/50"
-              />
-              <span className="text-sm text-slate-700 dark:text-slate-300">Free preview</span>
-            </label>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Replace video (optional)</label>
-              <input
-                type="file"
-                accept="video/mp4,video/webm"
-                onChange={(e) => setEditEpisodeVideo(e.target.files?.[0] ?? null)}
-                className="w-full text-sm text-slate-600 dark:text-slate-400 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-red-500 file:text-white file:text-sm file:cursor-pointer hover:file:bg-red-600"
-              />
-            </div>
-            <div className="flex gap-3 pt-2">
-              <Button type="submit" isLoading={savingEpisode} disabled={savingEpisode}>
-                Save
-              </Button>
-              <Button type="button" variant="outline" onClick={() => setEditingEpisode(null)}>
-                Cancel
-              </Button>
-            </div>
-          </form>
-        )}
-      </Modal>
-
-      {/* Add episode modal */}
-      <Modal
-        isOpen={showAddEpisode}
-        onClose={() => setShowAddEpisode(false)}
-        title="Add episode"
-        size="md"
-      >
-        <form onSubmit={addEpisodeSubmit} className="space-y-5">
-          <Input
-            label="Title"
-            value={addEpisodeTitle}
-            onChange={(e) => setAddEpisodeTitle(e.target.value)}
-            placeholder="Episode title"
-          />
-          <Input
-            label="Duration (min)"
-            type="number"
-            min="0"
-            value={addEpisodeDuration}
-            onChange={(e) => setAddEpisodeDuration(e.target.value)}
-            placeholder="—"
-          />
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={addEpisodeFree}
-              onChange={(e) => setAddEpisodeFree(e.target.checked)}
-              className="rounded border-slate-300 dark:border-slate-600 text-red-500 focus:ring-red-500/50"
-            />
-            <span className="text-sm text-slate-700 dark:text-slate-300">Free preview</span>
-          </label>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Video file (required)</label>
-            <input
-              type="file"
-              accept="video/mp4,video/webm"
-              required
-              onChange={(e) => setAddEpisodeVideo(e.target.files?.[0] ?? null)}
-              className="w-full text-sm text-slate-600 dark:text-slate-400 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-red-500 file:text-white file:text-sm file:cursor-pointer hover:file:bg-red-600"
-            />
-          </div>
-          <div className="flex gap-3 pt-2">
-            <Button type="submit" isLoading={addingEpisode} disabled={addingEpisode}>
-              Add episode
-            </Button>
-            <Button type="button" variant="outline" onClick={() => setShowAddEpisode(false)}>
-              Cancel
-            </Button>
-          </div>
-        </form>
-      </Modal>
-
-      <ConfirmDialog
-        isOpen={!!deleteConfirmEpisode}
-        onClose={() => setDeleteConfirmEpisode(null)}
-        onConfirm={confirmDeleteEpisode}
-        title="Delete episode?"
-        description={
-          deleteConfirmEpisode
-            ? `"${deleteConfirmEpisode.title || `Episode ${deleteConfirmEpisode.episode_number}`}" will be removed.`
-            : ""
-        }
-        confirmLabel="Delete"
-        cancelLabel="Cancel"
-        variant="danger"
-      />
-
       {/* Video upload progress modal */}
       {isReplacingVideo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -783,7 +630,7 @@ export default function EditMoviePage() {
           <div className="relative w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
             <div className="h-1 w-full bg-slate-200 dark:bg-slate-700">
               <div
-                className="h-full bg-gradient-to-r from-red-500 to-rose-500 transition-all duration-200 ease-linear"
+                className="h-full bg-linear-to-r from-red-500 to-rose-500 transition-all duration-200 ease-linear"
                 style={{ width: `${videoUploadProgress}%` }}
               />
             </div>
@@ -809,7 +656,7 @@ export default function EditMoviePage() {
 
               <div className="h-2.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-red-500 to-rose-500 transition-all duration-200 ease-linear"
+                  className="h-full rounded-full bg-linear-to-r from-red-500 to-rose-500 transition-all duration-200 ease-linear"
                   style={{ width: `${videoUploadProgress}%` }}
                 />
               </div>

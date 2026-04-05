@@ -8,14 +8,40 @@ import { usePayments } from "@/hooks/usePayments";
 import { Button } from "@/components/ui/Button";
 
 const PER_PAGE = 20;
+type PageItem = number | "ellipsis-left" | "ellipsis-right";
+
+function buildPageItems(currentPage: number, totalPages: number): PageItem[] {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, i) => i + 1);
+  }
+
+  if (currentPage <= 4) {
+    return [1, 2, 3, 4, 5, "ellipsis-right", totalPages];
+  }
+
+  if (currentPage >= totalPages - 3) {
+    return [1, "ellipsis-left", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+  }
+
+  return [
+    1,
+    "ellipsis-left",
+    currentPage - 1,
+    currentPage,
+    currentPage + 1,
+    "ellipsis-right",
+    totalPages,
+  ];
+}
 
 export default function PaymentsPage() {
-  const [status, setStatus] = useState("");
+  const [descriptionType, setDescriptionType] = useState("");
   const [page, setPage] = useState(1);
   const { payments, stats, isLoading, total, totalPages } = usePayments(
-    status || undefined,
+    descriptionType || undefined,
     page
   );
+  const pageItems = buildPageItems(page, totalPages);
 
   return (
     <div className="space-y-6">
@@ -29,9 +55,9 @@ export default function PaymentsPage() {
       {stats && <PaymentStats stats={stats} />}
 
       <PaymentFilters
-        status={status}
-        onStatusChange={(s) => {
-          setStatus(s);
+        descriptionType={descriptionType}
+        onDescriptionTypeChange={(value) => {
+          setDescriptionType(value);
           setPage(1);
         }}
       />
@@ -53,9 +79,36 @@ export default function PaymentsPage() {
             >
               Previous
             </Button>
-            <span className="text-sm text-slate-600 dark:text-slate-400">
-              Page {page} of {totalPages}
-            </span>
+            <div className="flex items-center gap-1">
+              {pageItems.map((item, index) => {
+                if (typeof item !== "number") {
+                  return (
+                    <span
+                      key={`${item}-${index}`}
+                      className="px-2 py-1 text-xs text-slate-400 dark:text-slate-500"
+                    >
+                      ...
+                    </span>
+                  );
+                }
+
+                const isActive = item === page;
+                return (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => setPage(item)}
+                    className={`min-w-8 rounded-md px-2 py-1.5 text-xs border transition-colors ${
+                      isActive
+                        ? "border-red-500 bg-red-500 text-white"
+                        : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    }`}
+                  >
+                    {item}
+                  </button>
+                );
+              })}
+            </div>
             <Button
               type="button"
               variant="outline"

@@ -5,7 +5,7 @@ import { getR2Config } from "@/lib/r2/client";
 import { requireAuth } from "@/lib/auth/requireAuth";
 import { createLogger } from "@/lib/logger";
 import { notifyTelegramNewMovie } from "@/lib/notifications/telegram";
-import { validateFinalStatus, validateKeyBelongsToMovie } from "@/lib/validations";
+import { validateFinalStatus, validateKeyBelongsToMovie, validateMovieId } from "@/lib/validations";
 import { enqueueTranscodeJob } from "@/lib/upload/transcode";
 
 const log = createLogger("api:series-multipart-complete");
@@ -195,23 +195,58 @@ export async function DELETE(request: NextRequest) {
       multiparts?: Array<{ uploadId: string; key: string }>;
     };
 
-    if (Array.isArray(multiparts)) {
-      await Promise.allSettled(
-        multiparts.map(({ uploadId, key }) => abortMultipartUpload(key, uploadId))
+    if (!movieId || !Array.isArray(multiparts) || multiparts.length === 0) {
+      return NextResponse.json(
+        { error: "movieId and multiparts are required" },
+        { status: 400 }
       );
     }
 
-    if (movieId) {
-      const supabase = createAdminClient();
-      try {
-        await supabase
-          .from("movies")
-          .delete()
-          .eq("id", movieId)
-          .eq("status", "uploading");
-      } catch { /* best-effort */ }
-      log.info("Cleaned up orphaned series record", { movieId });
+    const idError = validateMovieId(movieId);
+    if (idError) return NextResponse.json({ error: idError }, { status: 400 });
+
+    for (const item of multiparts) {
+      if (!item?.uploadId || !item?.key) {
+        return NextResponse.json(
+          { error: "Each multipart item must include uploadId and key" },
+          { status: 400 }
+        );
+      }
+      const keyError = validateKeyBelongsToMovie(item.key, movieId);
+      if (keyError) {
+        return NextResponse.json({ error: "Invalid multipart key" }, { status: 400 });
+      }
     }
+
+    const supabase = createAdminClient();
+    const { data: movie, error: movieError } = await supabase
+      .from("movies")
+      .select("id, status")
+      .eq("id", movieId)
+      .single();
+
+    if (movieError || !movie) {
+      return NextResponse.json({ error: "Movie not found" }, { status: 404 });
+    }
+
+    if (movie.status !== "uploading") {
+      return NextResponse.json(
+        { error: "Cleanup is only allowed for uploads in uploading status" },
+        { status: 409 }
+      );
+    }
+
+    await Promise.allSettled(
+      multiparts.map(({ uploadId, key }) => abortMultipartUpload(key, uploadId))
+    );
+
+    await supabase
+      .from("movies")
+      .delete()
+      .eq("id", movieId)
+      .eq("status", "uploading");
+
+    log.info("Cleaned up orphaned series record", { movieId });
 
     return NextResponse.json({ success: true });
   } catch (err) {

@@ -5,7 +5,7 @@ import { getR2Config } from "@/lib/r2/client";
 import { requireAuth } from "@/lib/auth/requireAuth";
 import { createLogger } from "@/lib/logger";
 import { notifyTelegramNewMovie } from "@/lib/notifications/telegram";
-import { validateMultipartComplete, validateKeyBelongsToMovie, validateFinalStatus } from "@/lib/validations";
+import { validateMultipartComplete, validateKeyBelongsToMovie, validateFinalStatus, validateMovieId } from "@/lib/validations";
 import { enqueueTranscodeJob } from "@/lib/upload/transcode";
 
 const log = createLogger("api:multipart-complete");
@@ -130,10 +130,34 @@ export async function DELETE(request: NextRequest) {
     const body = await request.json();
     const { uploadId, key, movieId } = body;
 
-    if (!uploadId || !key) {
+    if (!uploadId || !key || !movieId) {
       return NextResponse.json(
-        { error: "uploadId and key are required" },
+        { error: "movieId, uploadId and key are required" },
         { status: 400 }
+      );
+    }
+
+    const idError = validateMovieId(movieId);
+    if (idError) return NextResponse.json({ error: idError }, { status: 400 });
+
+    const keyError = validateKeyBelongsToMovie(key, movieId);
+    if (keyError) return NextResponse.json({ error: "Invalid key" }, { status: 400 });
+
+    const supabase = createAdminClient();
+    const { data: movie, error: movieError } = await supabase
+      .from("movies")
+      .select("id, status")
+      .eq("id", movieId)
+      .single();
+
+    if (movieError || !movie) {
+      return NextResponse.json({ error: "Movie not found" }, { status: 404 });
+    }
+
+    if (movie.status !== "uploading") {
+      return NextResponse.json(
+        { error: "Cleanup is only allowed for uploads in uploading status" },
+        { status: 409 }
       );
     }
 
@@ -141,19 +165,16 @@ export async function DELETE(request: NextRequest) {
     await abortMultipartUpload(key, uploadId);
 
     // Delete the orphaned "uploading" movie record
-    if (movieId) {
-      const supabase = createAdminClient();
-      const { error } = await supabase
-        .from("movies")
-        .delete()
-        .eq("id", movieId)
-        .eq("status", "uploading"); // safety guard: only delete if still in uploading state
+    const { error } = await supabase
+      .from("movies")
+      .delete()
+      .eq("id", movieId)
+      .eq("status", "uploading"); // safety guard: only delete if still in uploading state
 
-      if (error) {
-        log.warn("Failed to delete orphaned movie record", { movieId, error });
-      } else {
-        log.info("Cleaned up orphaned movie record", { movieId });
-      }
+    if (error) {
+      log.warn("Failed to delete orphaned movie record", { movieId, error });
+    } else {
+      log.info("Cleaned up orphaned movie record", { movieId });
     }
 
     return NextResponse.json({ success: true });

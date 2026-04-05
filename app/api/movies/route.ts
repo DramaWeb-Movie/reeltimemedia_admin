@@ -36,21 +36,45 @@ export async function GET(request: Request) {
     const status = searchParams.get("status");
     const type = searchParams.get("type");
     const search = searchParams.get("search")?.toLowerCase();
+    const pageParam = Number(searchParams.get("page") ?? "1");
+    const pageSizeParam = Number(searchParams.get("pageSize") ?? "20");
+
+    const page = Number.isFinite(pageParam) && pageParam > 0 ? Math.floor(pageParam) : 1;
+    const pageSizeRaw = Number.isFinite(pageSizeParam) ? Math.floor(pageSizeParam) : 20;
+    const pageSize = Math.min(20, Math.max(15, pageSizeRaw));
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
 
     const supabase = createAdminClient();
-    let query = supabase.from("movies").select("*").order("created_at", { ascending: false });
+    let query = supabase
+      .from("movies")
+      .select("*", { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(from, to);
 
     if (status) query = query.eq("status", status);
     if (type) query = query.eq("type", type);
     if (search) query = query.or(`title.ilike.%${search}%,genre.ilike.%${search}%`);
 
-    const { data, error } = await query;
+    const { data, error, count } = await query;
 
     if (error) {
       return NextResponse.json({ error: "Failed to fetch movies" }, { status: 500 });
     }
+
     const movies = (data ?? []).map(mapSupabaseRow);
-    return NextResponse.json({ movies });
+    const total = count ?? 0;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+    return NextResponse.json({
+      movies,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages,
+      },
+    });
   } catch {
     return NextResponse.json({ error: "Failed to fetch movies" }, { status: 500 });
   }

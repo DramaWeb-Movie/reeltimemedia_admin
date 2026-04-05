@@ -213,11 +213,19 @@ function uploadChunkXHR(
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", uploadUrl);
 
+    const onAbortSignal = () => xhr.abort();
+    const detachAbortSignal = () => {
+      if (abortSignal) {
+        abortSignal.removeEventListener("abort", onAbortSignal);
+      }
+    };
+
     xhr.upload.addEventListener("progress", (e) => {
       if (e.lengthComputable) onProgress(e.loaded);
     });
 
     xhr.addEventListener("load", () => {
+      detachAbortSignal();
       if (xhr.status >= 200 && xhr.status < 300) {
         const etag = xhr.getResponseHeader("ETag") || `"part-${partNumber}"`;
         resolve({ ETag: etag, PartNumber: partNumber });
@@ -226,15 +234,17 @@ function uploadChunkXHR(
       }
     });
 
-    xhr.addEventListener("error", () =>
-      reject(new Error(`Part ${partNumber} network error`))
-    );
-    xhr.addEventListener("abort", () =>
-      reject(new Error(`Part ${partNumber} aborted`))
-    );
+    xhr.addEventListener("error", () => {
+      detachAbortSignal();
+      reject(new Error(`Part ${partNumber} network error`));
+    });
+    xhr.addEventListener("abort", () => {
+      detachAbortSignal();
+      reject(new Error(`Part ${partNumber} aborted`));
+    });
 
     if (abortSignal) {
-      abortSignal.addEventListener("abort", () => xhr.abort());
+      abortSignal.addEventListener("abort", onAbortSignal, { once: true });
     }
 
     xhr.send(chunk);

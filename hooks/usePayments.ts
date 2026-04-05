@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import type { Payment, PaymentStats } from "@/types";
 
-export function usePayments(statusFilter?: string, page = 1) {
+export function usePayments(descriptionFilter?: string, page = 1) {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [stats, setStats] = useState<PaymentStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -15,7 +15,7 @@ export function usePayments(statusFilter?: string, page = 1) {
       setIsLoading(true);
       try {
         const params = new URLSearchParams();
-        if (statusFilter) params.set("status", statusFilter);
+        if (descriptionFilter) params.set("description", descriptionFilter);
         params.set("page", String(page));
         const [paymentsRes, statsRes] = await Promise.all([
           fetch(`/api/payments?${params}`),
@@ -47,7 +47,7 @@ export function usePayments(statusFilter?: string, page = 1) {
       }
     };
     load();
-  }, [statusFilter, page]);
+  }, [descriptionFilter, page]);
 
   return { payments, stats, isLoading, total, totalPages };
 }
