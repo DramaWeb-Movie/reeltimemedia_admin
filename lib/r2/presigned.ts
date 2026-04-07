@@ -2,6 +2,7 @@ import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { getR2Config } from "./client";
 import { getExtension } from "./mime";
+import { movieStorageDir } from "@/lib/r2/storage-path";
 
 const PRESIGNED_URL_EXPIRY = 3600; // 1 hour
 
@@ -48,6 +49,7 @@ export async function generatePresignedUploadUrl(
  */
 export async function generateMovieUploadUrls(
   movieId: string,
+  title: string,
   videoType: string,
   thumbnailType: string,
   subtitleFileName?: string
@@ -58,9 +60,10 @@ export async function generateMovieUploadUrls(
 }> {
   const videoExt = getExtension(videoType, "mp4");
   const thumbnailExt = getExtension(thumbnailType, "jpg");
+  const base = movieStorageDir(title, movieId);
 
-  const videoKey = `movies/${movieId}/video.${videoExt}`;
-  const thumbnailKey = `movies/${movieId}/thumbnail.${thumbnailExt}`;
+  const videoKey = `${base}/video.${videoExt}`;
+  const thumbnailKey = `${base}/thumbnail.${thumbnailExt}`;
 
   const [video, thumbnail] = await Promise.all([
     generatePresignedUploadUrl(videoKey, videoType),
@@ -70,7 +73,7 @@ export async function generateMovieUploadUrls(
   let subtitle: PresignedUrlResult | null = null;
   if (subtitleFileName) {
     const subtitleExt = subtitleFileName.toLowerCase().endsWith(".srt") ? "srt" : "vtt";
-    const subtitleKey = `movies/${movieId}/subtitles/en.${subtitleExt}`;
+    const subtitleKey = `${base}/subtitles/en.${subtitleExt}`;
     const contentType = subtitleExt === "vtt" ? "text/vtt" : "application/x-subrip";
     subtitle = await generatePresignedUploadUrl(subtitleKey, contentType);
   }

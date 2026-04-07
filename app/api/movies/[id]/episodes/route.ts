@@ -98,6 +98,14 @@ export async function POST(
 
     const supabase = createAdminClient();
 
+    const { data: seriesRow } = await supabase
+      .from("movies")
+      .select("title")
+      .eq("id", movieId)
+      .single();
+
+    const seriesTitle = String(seriesRow?.title ?? "");
+
     const { data: existing } = await supabase
       .from("series_episodes")
       .select("episode_number")
@@ -110,7 +118,7 @@ export async function POST(
 
     let videoUrl: string | null = null;
     try {
-      videoUrl = await uploadEpisodeVideo(movieId, nextNumber, videoFile);
+      videoUrl = await uploadEpisodeVideo(movieId, seriesTitle, nextNumber, videoFile);
     } catch (uploadErr) {
       console.error("Episode video upload error:", uploadErr);
       return NextResponse.json(

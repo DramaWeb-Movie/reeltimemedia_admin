@@ -25,6 +25,7 @@ export function MovieMediaSection({ movie }: MovieMediaSectionProps) {
           </h2>
           <div className="rounded-2xl overflow-hidden bg-black/40 ring-1 ring-slate-200/60 dark:ring-slate-700/70">
             <HlsQualityPlayer
+              key={`${movie.hls_manifest_url ?? ""}-${movie.video_url ?? ""}`}
               className="w-full aspect-video object-contain"
               manifestUrl={movie.hls_manifest_url}
               fallbackUrl={movie.video_url}

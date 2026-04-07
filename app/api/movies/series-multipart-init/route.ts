@@ -14,6 +14,7 @@ import {
   MAX_VIDEO_BYTES,
   MAX_IMAGE_BYTES,
 } from "@/lib/r2/mime";
+import { movieStorageDir } from "@/lib/r2/storage-path";
 
 const log = createLogger("api:series-multipart-init");
 
@@ -142,6 +143,7 @@ export async function POST(request: NextRequest) {
   }
 
   const movieId = movie.id;
+  const seriesTitle = title.trim();
 
   // Track created multipart uploads so we can abort them all on failure
   const createdMultiparts: Array<{ uploadId: string; key: string }> = [];
@@ -149,7 +151,8 @@ export async function POST(request: NextRequest) {
   try {
     // Thumbnail presigned URL
     const thumbnailExt = getExtension(thumbnailType, "jpg");
-    const thumbnailKey = `movies/${movieId}/thumbnail.${thumbnailExt}`;
+    const base = movieStorageDir(seriesTitle, movieId);
+    const thumbnailKey = `${base}/thumbnail.${thumbnailExt}`;
     const thumbnail = await generatePresignedUploadUrl(thumbnailKey, thumbnailType);
 
     // One multipart upload per episode
@@ -157,6 +160,7 @@ export async function POST(request: NextRequest) {
       episodes.map(async (ep) => {
         const multipart = await initEpisodeVideoMultipartUpload(
           movieId,
+          seriesTitle,
           ep.episodeNumber,
           ep.videoType,
           Number(ep.videoSize)

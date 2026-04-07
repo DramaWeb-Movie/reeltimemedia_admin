@@ -3,6 +3,8 @@
  * Returns an error message string on failure, or null on success.
  */
 
+import { isR2KeyForMovie } from "@/lib/r2/storage-path";
+
 export type ValidationResult = string | null;
 
 export function validateTitle(title: unknown): ValidationResult {
@@ -78,7 +80,7 @@ export function validateMultipartComplete(body: {
  * Validate that an R2 key belongs to the expected movie to prevent path traversal.
  */
 export function validateKeyBelongsToMovie(key: string, movieId: string): ValidationResult {
-  if (!key.startsWith(`movies/${movieId}/`)) {
+  if (!isR2KeyForMovie(key, movieId)) {
     return "Invalid key: does not belong to this movie";
   }
   return null;

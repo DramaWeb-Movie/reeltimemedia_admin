@@ -16,6 +16,8 @@ import {
   MAX_VIDEO_BYTES,
   getExtension,
 } from "@/lib/r2/mime";
+import { movieStorageDir, isR2KeyForMovie, hlsOutputPrefixFromSourceVideoKey } from "@/lib/r2/storage-path";
+import { enqueueTranscodeJob } from "@/lib/upload/transcode";
 
 const log = createLogger("api:replace-media");
 
@@ -52,13 +54,16 @@ export async function POST(
   const supabase = createAdminClient();
   const { data: movie, error: fetchErr } = await supabase
     .from("movies")
-    .select("id, type")
+    .select("id, type, title")
     .eq("id", id)
     .single();
 
   if (fetchErr || !movie) {
     return NextResponse.json({ error: "Movie not found" }, { status: 404 });
   }
+
+  const movieTitle = String(movie.title ?? "");
+  const base = movieStorageDir(movieTitle, id);
 
   const result: Record<string, unknown> = {};
 
@@ -74,7 +79,7 @@ export async function POST(
         );
       }
       const ext = getExtension(thumbnailType, "jpg");
-      const key = `movies/${id}/thumbnail.${ext}`;
+      const key = `${base}/thumbnail.${ext}`;
       const presigned = await generatePresignedUploadUrl(key, thumbnailType);
       result.thumbnail = presigned;
     }
@@ -91,6 +96,7 @@ export async function POST(
       }
       const multipart = await initMovieVideoMultipartUpload(
         id,
+        movieTitle,
         videoType,
         Number(videoSize),
         videoPartSize
@@ -136,7 +142,7 @@ export async function PATCH(
     );
   }
 
-  if (!key.startsWith(`movies/${id}/`)) {
+  if (!isR2KeyForMovie(key, id)) {
     return NextResponse.json({ error: "Invalid key" }, { status: 400 });
   }
 
@@ -148,12 +154,29 @@ export async function PATCH(
     const supabase = createAdminClient();
     const { error } = await supabase
       .from("movies")
-      .update({ video_url: videoUrl, updated_at: new Date().toISOString() })
+      .update({
+        video_url: videoUrl,
+        hls_manifest_url: null,
+        encoding_status: "pending",
+        encoding_error: null,
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", id);
 
     if (error) {
       log.error("Failed to update video_url", error);
       return NextResponse.json({ error: "Failed to save video URL" }, { status: 500 });
+    }
+
+    try {
+      await enqueueTranscodeJob({
+        kind: "single_movie",
+        movieId: id,
+        sourceKey: key,
+        outputKeyPrefix: hlsOutputPrefixFromSourceVideoKey(key),
+      });
+    } catch (enqueueErr) {
+      log.warn("Transcode enqueue failed after video replace", { movieId: id, error: enqueueErr });
     }
 
     log.info("Video replaced", { movieId: id });
@@ -185,7 +208,7 @@ export async function DELETE(
     return NextResponse.json({ error: "uploadId and key are required" }, { status: 400 });
   }
 
-  if (!key.startsWith(`movies/${id}/`)) {
+  if (!isR2KeyForMovie(key, id)) {
     return NextResponse.json({ error: "Invalid key" }, { status: 400 });
   }
 

@@ -14,6 +14,7 @@ import {
   MAX_IMAGE_BYTES,
 } from "./mime";
 import { createLogger } from "@/lib/logger";
+import { movieStorageDir } from "@/lib/r2/storage-path";
 
 const log = createLogger("r2:upload");
 
@@ -145,7 +146,7 @@ export async function uploadLargeFileToR2(
   }
 }
 
-export async function uploadVideo(movieId: string, file: File): Promise<string> {
+export async function uploadVideo(movieId: string, title: string, file: File): Promise<string> {
   const mime = file.type;
   if (!ALLOWED_VIDEO_TYPES.includes(mime)) {
     throw new Error(`Invalid video type. Allowed: ${ALLOWED_VIDEO_TYPES.join(", ")}`);
@@ -153,9 +154,9 @@ export async function uploadVideo(movieId: string, file: File): Promise<string> 
   if (file.size > MAX_VIDEO_BYTES) {
     throw new Error(`Video too large. Max ${MAX_VIDEO_BYTES / 1024 / 1024 / 1024}GB`);
   }
-  
+
   const ext = getExtension(mime, "mp4");
-  const key = `movies/${movieId}/video.${ext}`;
+  const key = `${movieStorageDir(title, movieId)}/video.${ext}`;
 
   // Use multipart upload for large files
   if (file.size > MULTIPART_THRESHOLD) {
@@ -168,7 +169,7 @@ export async function uploadVideo(movieId: string, file: File): Promise<string> 
   return uploadToR2(key, buffer, mime);
 }
 
-export async function uploadThumbnail(movieId: string, file: File): Promise<string> {
+export async function uploadThumbnail(movieId: string, title: string, file: File): Promise<string> {
   const mime = file.type;
   if (!ALLOWED_IMAGE_TYPES.includes(mime)) {
     throw new Error(`Invalid image type. Allowed: ${ALLOWED_IMAGE_TYPES.join(", ")}`);
@@ -177,15 +178,15 @@ export async function uploadThumbnail(movieId: string, file: File): Promise<stri
     throw new Error(`Thumbnail too large. Max ${MAX_IMAGE_BYTES / 1024 / 1024}MB`);
   }
   const ext = getExtension(mime, "jpg");
-  const key = `movies/${movieId}/thumbnail.${ext}`;
+  const key = `${movieStorageDir(title, movieId)}/thumbnail.${ext}`;
   const buffer = Buffer.from(await file.arrayBuffer());
   return uploadToR2(key, buffer, mime);
 }
 
-export async function uploadSubtitle(movieId: string, file: File, lang = "en"): Promise<string> {
+export async function uploadSubtitle(movieId: string, title: string, file: File, lang = "en"): Promise<string> {
   const name = file.name.toLowerCase();
   const ext = name.endsWith(".vtt") ? "vtt" : name.endsWith(".srt") ? "srt" : "vtt";
-  const key = `movies/${movieId}/subtitles/${lang}.${ext}`;
+  const key = `${movieStorageDir(title, movieId)}/subtitles/${lang}.${ext}`;
   const buffer = Buffer.from(await file.arrayBuffer());
   const contentType = ext === "vtt" ? "text/vtt" : "application/x-subrip";
   return uploadToR2(key, buffer, contentType);
@@ -193,6 +194,7 @@ export async function uploadSubtitle(movieId: string, file: File, lang = "en"): 
 
 export async function uploadEpisodeVideo(
   movieId: string,
+  title: string,
   episodeNumber: number,
   file: File
 ): Promise<string> {
@@ -205,7 +207,7 @@ export async function uploadEpisodeVideo(
   }
 
   const ext = getExtension(mime, "mp4");
-  const key = `movies/${movieId}/episodes/${episodeNumber}.${ext}`;
+  const key = `${movieStorageDir(title, movieId)}/episodes/${episodeNumber}.${ext}`;
 
   // Use multipart upload for large files
   if (file.size > MULTIPART_THRESHOLD) {

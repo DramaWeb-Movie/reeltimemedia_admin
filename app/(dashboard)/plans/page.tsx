@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, memo } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -9,11 +9,54 @@ import { Spinner } from "@/components/ui/Spinner";
 import { Modal } from "@/components/ui/Modal";
 import type { SubscriptionPlan } from "@/types";
 
+const BILLING_PERIOD_OPTIONS = [
+  { value: "monthly", label: "Monthly" },
+  { value: "yearly", label: "Yearly" },
+];
+
+function formatPrice(plan: SubscriptionPlan) {
+  const period = plan.billing_period === "monthly" ? "/mo" : "/yr";
+  return `$${plan.price.toFixed(2)}${period}`;
+}
+
+async function fetchPlansList(signal?: AbortSignal): Promise<SubscriptionPlan[]> {
+  const res = await fetch("/api/plans", { signal });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.plans ?? [];
+}
+
+type PlanCardProps = {
+  plan: SubscriptionPlan;
+  onEdit: (plan: SubscriptionPlan) => void;
+};
+
+const PlanCard = memo(function PlanCard({ plan, onEdit }: PlanCardProps) {
+  return (
+    <Card className="hover:border-slate-300 dark:hover:border-slate-700 transition-colors">
+      <div className="flex items-start justify-between">
+        <div>
+          <h3 className="font-semibold text-slate-900 dark:text-white">{plan.name}</h3>
+          <p className="mt-1 text-2xl font-bold text-red-400">{formatPrice(plan)}</p>
+          {plan.description && (
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">{plan.description}</p>
+          )}
+        </div>
+        <Button variant="ghost" size="sm" onClick={() => onEdit(plan)}>
+          Edit
+        </Button>
+      </div>
+    </Card>
+  );
+});
+
 export default function PlansPage() {
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: "",
     price: "",
@@ -22,33 +65,45 @@ export default function PlansPage() {
   });
 
   useEffect(() => {
-    fetch("/api/plans")
-      .then((res) => (res.ok ? res.json() : { plans: [] }))
-      .then((data) => setPlans(data.plans ?? []))
-      .catch(() => setPlans([]))
-      .finally(() => setIsLoading(false));
+    const ac = new AbortController();
+    setIsLoading(true);
+    fetchPlansList(ac.signal)
+      .then((list) => {
+        if (!ac.signal.aborted) setPlans(list);
+      })
+      .catch((err) => {
+        if ((err as Error).name === "AbortError") return;
+        if (!ac.signal.aborted) setPlans([]);
+      })
+      .finally(() => {
+        if (!ac.signal.aborted) setIsLoading(false);
+      });
+    return () => ac.abort();
   }, []);
 
-  const handleOpenAdd = () => {
+  const handleOpenAdd = useCallback(() => {
     setEditingPlan(null);
     setForm({ name: "", price: "", billing_period: "monthly", description: "" });
     setSaveError(null);
     setShowModal(true);
-  };
+  }, []);
 
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-
-  const refetchPlans = () => {
-    return fetch("/api/plans")
-      .then((res) => (res.ok ? res.json() : { plans: [] }))
-      .then((data) => setPlans(data.plans ?? []))
-      .catch(() => setPlans([]));
-  };
+  const handleEditPlan = useCallback((plan: SubscriptionPlan) => {
+    setEditingPlan(plan);
+    setForm({
+      name: plan.name,
+      price: plan.price.toString(),
+      billing_period: plan.billing_period,
+      description: plan.description ?? "",
+    });
+    setSaveError(null);
+    setShowModal(true);
+  }, []);
 
   const handleSave = async () => {
     setSaveError(null);
     setIsSaving(true);
+    const editingId = editingPlan?.id ?? null;
     try {
       const payload = {
         name: form.name.trim(),
@@ -69,18 +124,24 @@ export default function PlansPage() {
         setSaveError(data.error || "Failed to save plan");
         return;
       }
+      const saved = data.plan as SubscriptionPlan | undefined;
+      if (saved) {
+        setPlans((prev) => {
+          if (editingId) {
+            return prev.map((p) => (p.id === saved.id ? saved : p));
+          }
+          return [saved, ...prev];
+        });
+      } else {
+        const list = await fetchPlansList();
+        setPlans(list);
+      }
       setShowModal(false);
-      await refetchPlans();
     } catch {
       setSaveError("Failed to save plan");
     } finally {
       setIsSaving(false);
     }
-  };
-
-  const formatPrice = (plan: SubscriptionPlan) => {
-    const period = plan.billing_period === "monthly" ? "/mo" : "/yr";
-    return `$${plan.price.toFixed(2)}${period}`;
   };
 
   if (isLoading) {
@@ -105,36 +166,7 @@ export default function PlansPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {plans.map((plan) => (
-          <Card key={plan.id} className="hover:border-slate-300 dark:hover:border-slate-700 transition-colors">
-            <div className="flex items-start justify-between">
-              <div>
-                <h3 className="font-semibold text-slate-900 dark:text-white">{plan.name}</h3>
-                <p className="mt-1 text-2xl font-bold text-red-400">
-                  {formatPrice(plan)}
-                </p>
-                {plan.description && (
-                  <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">{plan.description}</p>
-                )}
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setEditingPlan(plan);
-                  setForm({
-                    name: plan.name,
-                    price: plan.price.toString(),
-                    billing_period: plan.billing_period,
-                    description: plan.description ?? "",
-                  });
-                  setSaveError(null);
-                  setShowModal(true);
-                }}
-              >
-                Edit
-              </Button>
-            </div>
-          </Card>
+          <PlanCard key={plan.id} plan={plan} onEdit={handleEditPlan} />
         ))}
       </div>
 
@@ -175,10 +207,7 @@ export default function PlansPage() {
           />
           <Select
             label="Billing Period"
-            options={[
-              { value: "monthly", label: "Monthly" },
-              { value: "yearly", label: "Yearly" },
-            ]}
+            options={BILLING_PERIOD_OPTIONS}
             value={form.billing_period}
             onChange={(e) =>
               setForm((f) => ({

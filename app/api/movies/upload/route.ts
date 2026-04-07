@@ -84,8 +84,8 @@ export async function POST(request: NextRequest) {
     const movieId = movie.id;
 
     const [videoUrl, thumbnailUrl] = await Promise.all([
-      uploadVideo(movieId, videoFile!),
-      uploadThumbnail(movieId, thumbnailFile!),
+      uploadVideo(movieId, title.trim(), videoFile!),
+      uploadThumbnail(movieId, title.trim(), thumbnailFile!),
     ]);
 
     const { error: updateError } = await supabase

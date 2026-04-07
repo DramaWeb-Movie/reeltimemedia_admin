@@ -14,6 +14,7 @@ import {
   MAX_VIDEO_BYTES,
   MAX_IMAGE_BYTES,
 } from "@/lib/r2/mime";
+import { movieStorageDir } from "@/lib/r2/storage-path";
 
 const log = createLogger("api:multipart-init");
 
@@ -117,6 +118,7 @@ export async function POST(request: NextRequest) {
   }
 
   const movieId = movie.id;
+  const movieTitle = title.trim();
 
   // Track multipart state so we can abort on error
   let multipartUploadId: string | null = null;
@@ -125,6 +127,7 @@ export async function POST(request: NextRequest) {
   try {
     const multipart = await initMovieVideoMultipartUpload(
       movieId,
+      movieTitle,
       videoType,
       Number(videoSize),
       partSize
@@ -133,13 +136,14 @@ export async function POST(request: NextRequest) {
     multipartKey = multipart.upload.key;
 
     const thumbnailExt = getExtension(thumbnailType, "jpg");
-    const thumbnailKey = `movies/${movieId}/thumbnail.${thumbnailExt}`;
+    const base = movieStorageDir(movieTitle, movieId);
+    const thumbnailKey = `${base}/thumbnail.${thumbnailExt}`;
     const thumbnail = await generatePresignedUploadUrl(thumbnailKey, thumbnailType);
 
     let subtitle = null;
     if (subtitleFileName) {
       const subtitleExt = subtitleFileName.toLowerCase().endsWith(".srt") ? "srt" : "vtt";
-      const subtitleKey = `movies/${movieId}/subtitles/en.${subtitleExt}`;
+      const subtitleKey = `${base}/subtitles/en.${subtitleExt}`;
       const contentType = subtitleExt === "vtt" ? "text/vtt" : "application/x-subrip";
       subtitle = await generatePresignedUploadUrl(subtitleKey, contentType);
     }

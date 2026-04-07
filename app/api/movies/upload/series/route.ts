@@ -98,7 +98,7 @@ export async function POST(request: Request) {
 
     let thumbnailUrl: string | null = null;
     try {
-      thumbnailUrl = await uploadThumbnail(movieId, thumbnailFile!);
+      thumbnailUrl = await uploadThumbnail(movieId, title, thumbnailFile!);
     } catch (uploadErr) {
       log.error("Thumbnail upload error", uploadErr);
       return NextResponse.json(
@@ -130,7 +130,7 @@ export async function POST(request: Request) {
       let videoUrl: string | null = null;
       if (videoFile && videoFile.size > 0) {
         try {
-          videoUrl = await uploadEpisodeVideo(movieId, epNum, videoFile);
+          videoUrl = await uploadEpisodeVideo(movieId, title, epNum, videoFile);
         } catch (uploadErr) {
           log.error(`Episode ${epNum} upload error`, uploadErr);
           return NextResponse.json(

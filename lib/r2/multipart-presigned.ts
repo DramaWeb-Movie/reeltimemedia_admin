@@ -8,6 +8,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { getR2Config } from "./client";
 import { getExtension } from "./mime";
 import { createLogger } from "@/lib/logger";
+import { movieStorageDir } from "@/lib/r2/storage-path";
 
 const log = createLogger("r2:multipart");
 
@@ -136,6 +137,7 @@ export async function abortMultipartUpload(
  */
 export async function initMovieVideoMultipartUpload(
   movieId: string,
+  title: string,
   videoType: string,
   fileSize: number,
   partSize: number = 8 * 1024 * 1024 // 8MB chunks — keeps all parallel connections busy
@@ -146,7 +148,7 @@ export async function initMovieVideoMultipartUpload(
   totalParts: number;
 }> {
   const ext = getExtension(videoType, "mp4");
-  const key = `movies/${movieId}/video.${ext}`;
+  const key = `${movieStorageDir(title, movieId)}/video.${ext}`;
 
   const totalParts = Math.ceil(fileSize / partSize);
 
@@ -166,6 +168,7 @@ export async function initMovieVideoMultipartUpload(
  */
 export async function initEpisodeVideoMultipartUpload(
   movieId: string,
+  title: string,
   episodeNumber: number,
   videoType: string,
   fileSize: number,
@@ -177,7 +180,7 @@ export async function initEpisodeVideoMultipartUpload(
   totalParts: number;
 }> {
   const ext = getExtension(videoType, "mp4");
-  const key = `movies/${movieId}/episodes/${episodeNumber}.${ext}`;
+  const key = `${movieStorageDir(title, movieId)}/episodes/${episodeNumber}.${ext}`;
 
   const totalParts = Math.ceil(fileSize / partSize);
 

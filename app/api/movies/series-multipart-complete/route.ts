@@ -7,6 +7,7 @@ import { createLogger } from "@/lib/logger";
 import { notifyTelegramNewMovie } from "@/lib/notifications/telegram";
 import { validateFinalStatus, validateKeyBelongsToMovie, validateMovieId } from "@/lib/validations";
 import { enqueueTranscodeJob } from "@/lib/upload/transcode";
+import { hlsOutputPrefixFromSourceVideoKey } from "@/lib/r2/storage-path";
 
 const log = createLogger("api:series-multipart-complete");
 
@@ -151,7 +152,7 @@ export async function POST(request: NextRequest) {
             episodeId,
             episodeNumber: item.episodeNumber,
             sourceKey: item.sourceKey,
-            outputKeyPrefix: `movies/${movieId}/episodes/${item.episodeNumber}/hls`,
+            outputKeyPrefix: hlsOutputPrefixFromSourceVideoKey(item.sourceKey),
           });
         } catch (enqueueErr) {
           log.warn("Episode transcode enqueue failed", {

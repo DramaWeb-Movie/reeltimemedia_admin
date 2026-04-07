@@ -7,6 +7,7 @@ import { createLogger } from "@/lib/logger";
 import { notifyTelegramNewMovie } from "@/lib/notifications/telegram";
 import { validateMultipartComplete, validateKeyBelongsToMovie, validateFinalStatus, validateMovieId } from "@/lib/validations";
 import { enqueueTranscodeJob } from "@/lib/upload/transcode";
+import { hlsOutputPrefixFromSourceVideoKey } from "@/lib/r2/storage-path";
 
 const log = createLogger("api:multipart-complete");
 
@@ -91,7 +92,7 @@ export async function POST(request: NextRequest) {
         kind: "single_movie",
         movieId,
         sourceKey: key,
-        outputKeyPrefix: `movies/${movieId}/hls`,
+        outputKeyPrefix: hlsOutputPrefixFromSourceVideoKey(key),
       });
     } catch (enqueueErr) {
       log.warn("Transcode enqueue failed after upload finalize", { movieId, error: enqueueErr });

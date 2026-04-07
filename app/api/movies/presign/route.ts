@@ -102,6 +102,7 @@ export async function POST(request: NextRequest) {
     // Generate presigned URLs for upload
     const uploadUrls = await generateMovieUploadUrls(
       movieId,
+      title.trim(),
       videoType,
       thumbnailType
     );

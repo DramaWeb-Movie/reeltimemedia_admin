@@ -2,6 +2,15 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { uploadEpisodeVideo } from "@/lib/r2/upload";
 import { requireAuth } from "@/lib/auth/requireAuth";
+import { getR2Config } from "@/lib/r2/client";
+import {
+  hlsOutputPrefixFromSourceVideoKey,
+  objectKeyFromStoredFileUrl,
+} from "@/lib/r2/storage-path";
+import { enqueueTranscodeJob } from "@/lib/upload/transcode";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("api:episodes:patch");
 
 export async function PATCH(
   request: Request,
@@ -53,15 +62,31 @@ export async function PATCH(
       return NextResponse.json({ error: "Episode not found" }, { status: 404 });
     }
 
+    const { data: seriesRow } = await supabase
+      .from("movies")
+      .select("title")
+      .eq("id", movieId)
+      .single();
+    const seriesTitle = String(seriesRow?.title ?? "");
+
     const updates: Record<string, unknown> = {};
     if (title !== null) updates.title = title;
     if (duration !== null) updates.duration = duration;
     if (is_free_preview !== null) updates.is_free_preview = is_free_preview;
 
+    let replacedVideoKey: string | null = null;
+    let replacedEpisodeNumber: number | null = null;
+
     if (videoFile && videoFile.size > 0) {
       const episodeNumber = Number(existing.episode_number);
-      const videoUrl = await uploadEpisodeVideo(movieId, episodeNumber, videoFile);
+      const videoUrl = await uploadEpisodeVideo(movieId, seriesTitle, episodeNumber, videoFile);
       updates.video_url = videoUrl;
+      updates.hls_manifest_url = null;
+      updates.encoding_status = "pending";
+      updates.encoding_error = null;
+      const { publicUrl } = getR2Config();
+      replacedVideoKey = objectKeyFromStoredFileUrl(videoUrl, publicUrl);
+      replacedEpisodeNumber = episodeNumber;
     }
 
     const { data: updated, error: updateError } = await supabase
@@ -77,6 +102,33 @@ export async function PATCH(
         { status: 500 }
       );
     }
+
+    if (videoFile && videoFile.size > 0) {
+      if (replacedVideoKey && replacedEpisodeNumber != null) {
+        try {
+          await enqueueTranscodeJob({
+            kind: "single_episode",
+            movieId,
+            episodeId,
+            episodeNumber: replacedEpisodeNumber,
+            sourceKey: replacedVideoKey,
+            outputKeyPrefix: hlsOutputPrefixFromSourceVideoKey(replacedVideoKey),
+          });
+        } catch (enqueueErr) {
+          log.warn("Transcode enqueue failed after episode video replace", {
+            movieId,
+            episodeId,
+            error: enqueueErr,
+          });
+        }
+      } else {
+        log.warn("Episode video replaced but could not derive R2 key for transcode enqueue", {
+          movieId,
+          episodeId,
+        });
+      }
+    }
+
     return NextResponse.json({ episode: updated });
   } catch (err) {
     console.error("Episode PATCH error:", err);
