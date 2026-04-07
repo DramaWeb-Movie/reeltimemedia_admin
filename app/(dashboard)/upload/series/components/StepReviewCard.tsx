@@ -1,4 +1,5 @@
 import { memo } from "react";
+import Image from "next/image";
 import { Card } from "@/components/ui/Card";
 import { formatBytes } from "@/lib/upload/parallel-uploader";
 import type { EpisodeInput } from "@/types";
@@ -36,11 +37,7 @@ export const StepReviewCard = memo(function StepReviewCard({
           <div>
             <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Cover image</p>
             <div className="w-24 aspect-2/3 rounded-lg bg-slate-100 dark:bg-slate-800 overflow-hidden border border-slate-200 dark:border-slate-700">
-              <img
-                src={thumbnailPreviewUrl ?? ""}
-                alt="Cover"
-                className="w-full h-full object-cover"
-              />
+              <Image src={thumbnailPreviewUrl ?? ""} alt="Cover" width={96} height={144} unoptimized className="w-full h-full object-cover" />
             </div>
           </div>
         )}

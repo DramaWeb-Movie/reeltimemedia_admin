@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { SubscriptionPlan } from "@/types";
+import { billingPeriodFromStorage, parseBillingPeriodInput } from "@/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAuth } from "@/lib/auth/requireAuth";
 
@@ -9,7 +10,7 @@ function mapRow(row: Record<string, unknown>): SubscriptionPlan {
     name: String(row.name),
     price: Number(row.price),
     currency: (row.currency as string) ?? "USD",
-    billing_period: (row.billing_period as SubscriptionPlan["billing_period"]) ?? "monthly",
+    billing_period: billingPeriodFromStorage(row.billing_period),
     description: (row.description as string) ?? null,
     created_at: String(row.created_at ?? ""),
     updated_at: String(row.updated_at ?? ""),
@@ -28,7 +29,10 @@ export async function PUT(
     const body = await request.json();
     const name = body.name?.trim();
     const price = parseFloat(body.price);
-    const billing_period = body.billing_period === "yearly" ? "yearly" : "monthly";
+    const billing_period = parseBillingPeriodInput(body.billing_period);
+    if (!billing_period) {
+      return NextResponse.json({ error: "Invalid billing_period" }, { status: 400 });
+    }
     const description = body.description?.trim() || null;
     const currency = body.currency?.trim() || "USD";
 

@@ -3,12 +3,14 @@ import type { ReactNode } from "react";
 interface TableProps {
   children: ReactNode;
   className?: string;
+  /** Applied to the inner `<table>` (e.g. min-width for wide column sets). */
+  tableClassName?: string;
 }
 
-export function Table({ children, className = "" }: TableProps) {
+export function Table({ children, className = "", tableClassName = "" }: TableProps) {
   return (
     <div className={`overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 ${className}`}>
-      <table className="w-full">{children}</table>
+      <table className={`w-full border-collapse ${tableClassName}`}>{children}</table>
     </div>
   );
 }

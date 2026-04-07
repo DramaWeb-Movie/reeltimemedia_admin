@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Hls from "hls.js";
 
 interface HlsQualityPlayerProps {
@@ -31,12 +31,26 @@ export function HlsQualityPlayer({ manifestUrl, fallbackUrl, poster, className }
   const [showControls, setShowControls] = useState(true);
   const [showQualityMenu, setShowQualityMenu] = useState(false);
 
+  const keepControlsVisible = useCallback(() => {
+    setShowControls(true);
+    if (hideTimerRef.current) {
+      window.clearTimeout(hideTimerRef.current);
+    }
+    if (isPlaying) {
+      hideTimerRef.current = window.setTimeout(() => {
+        setShowControls(false);
+        setShowQualityMenu(false);
+      }, 2200);
+    }
+  }, [isPlaying]);
+
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
     hlsRef.current?.destroy();
     hlsRef.current = null;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setAvailableHeights([]);
     setSelectedQuality("auto");
     setNativeHls(false);
@@ -127,11 +141,12 @@ export function HlsQualityPlayer({ manifestUrl, fallbackUrl, poster, className }
 
   useEffect(() => {
     if (!isPlaying) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowControls(true);
       return;
     }
     keepControlsVisible();
-  }, [isPlaying]);
+  }, [isPlaying, keepControlsVisible]);
 
   const qualityOptions = useMemo(
     () =>
@@ -144,7 +159,6 @@ export function HlsQualityPlayer({ manifestUrl, fallbackUrl, poster, className }
   );
 
   const canManualQualitySwitch = Boolean(manifestUrl) && !nativeHls;
-  const playbackModeLabel = manifestUrl ? (nativeHls ? "HLS Native" : "HLS.js") : "Original MP4";
 
   function onQualityChange(value: string) {
     setSelectedQuality(value);
@@ -216,19 +230,6 @@ export function HlsQualityPlayer({ manifestUrl, fallbackUrl, poster, className }
     const video = videoRef.current;
     if (!video) return;
     onSeek(Math.min(duration || 0, video.currentTime + 10));
-  }
-
-  function keepControlsVisible() {
-    setShowControls(true);
-    if (hideTimerRef.current) {
-      window.clearTimeout(hideTimerRef.current);
-    }
-    if (isPlaying) {
-      hideTimerRef.current = window.setTimeout(() => {
-        setShowControls(false);
-        setShowQualityMenu(false);
-      }, 2200);
-    }
   }
 
   return (

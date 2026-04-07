@@ -5,12 +5,14 @@ import type {
   DashboardStats,
   RecentActivity,
   RevenueChartData,
+  TopSaleMovie,
 } from "@/types";
 
 export function useDashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [activities, setActivities] = useState<RecentActivity[]>([]);
   const [chartData, setChartData] = useState<RevenueChartData | null>(null);
+  const [topSales, setTopSales] = useState<TopSaleMovie[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -23,15 +25,18 @@ export function useDashboard() {
           setStats(data.stats ?? null);
           setActivities(data.activities ?? []);
           setChartData(data.chartData ?? null);
+          setTopSales(data.topSales ?? []);
         } else {
           setStats(null);
           setActivities([]);
           setChartData(null);
+          setTopSales([]);
         }
       } catch {
         setStats(null);
         setActivities([]);
         setChartData(null);
+        setTopSales([]);
       } finally {
         setIsLoading(false);
       }
@@ -43,6 +48,7 @@ export function useDashboard() {
     stats,
     activities,
     chartData,
+    topSales,
     isLoading,
   };
 }

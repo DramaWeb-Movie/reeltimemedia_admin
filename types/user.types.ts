@@ -14,6 +14,15 @@ export interface User {
   subscription_expires_at: string | null;
   created_at: string;
   updated_at: string;
+  /** Present when loaded from Supabase Auth (banned_until in the future). */
+  blocked?: boolean;
+}
+
+/** Completed payments attributed to a movie for a single user. */
+export interface UserPurchaseMovie {
+  movieId: string;
+  title: string;
+  purchasedAt: string;
 }
 
 export interface UserStatistics {

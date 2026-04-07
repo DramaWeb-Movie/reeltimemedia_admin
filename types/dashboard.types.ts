@@ -31,3 +31,23 @@ export interface RevenueChartData {
     color?: string;
   }[];
 }
+
+/** Completed payments attributed to a movie (see dashboard stats aggregation). */
+export interface TopSaleMovie {
+  movieId: string;
+  title: string;
+  salesCount: number;
+}
+
+export interface MovieSalesListResponse {
+  items: TopSaleMovie[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+  /** Inclusive bounds used for the query (ISO 8601, UTC). */
+  rangeStart: string;
+  rangeEnd: string;
+}

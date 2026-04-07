@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 
 interface CastInputProps {
   label?: string;
@@ -11,7 +11,10 @@ interface CastInputProps {
 
 export function CastInput({ label = "Cast", value, onChange, placeholder = "Actor name" }: CastInputProps) {
   const [inputValue, setInputValue] = useState("");
-  const castList = value ? value.split(",").map((s) => s.trim()).filter(Boolean) : [];
+  const castList = useMemo(
+    () => (value ? value.split(",").map((s) => s.trim()).filter(Boolean) : []),
+    [value]
+  );
 
   const addCast = useCallback(() => {
     const name = inputValue.trim();

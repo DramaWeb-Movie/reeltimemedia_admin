@@ -30,7 +30,7 @@
 --   name VARCHAR(100) NOT NULL,
 --   price DECIMAL(10, 2) NOT NULL,
 --   currency VARCHAR(3) DEFAULT 'USD',
---   billing_period VARCHAR(20) NOT NULL, -- 'monthly' or 'yearly'
+--   billing_period VARCHAR(20) NOT NULL, -- weekly | monthly | three_months | six_months | yearly
 --   description TEXT,
 --   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 --   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -52,6 +52,7 @@
 -- CREATE TABLE payments (
 --   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 --   user_id UUID REFERENCES user_profiles(id) ON DELETE CASCADE,
+--   movie_id UUID REFERENCES movies(id) ON DELETE SET NULL, -- optional; used for dashboard top sales
 --   amount DECIMAL(10, 2) NOT NULL,
 --   currency VARCHAR(3) DEFAULT 'USD',
 --   payment_method VARCHAR(50), -- credit_card, paypal, etc.

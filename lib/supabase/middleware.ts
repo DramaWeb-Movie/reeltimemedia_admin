@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 const PIN_COOKIE = "reeltime-admin-pin";
-const protectedPaths = ["/overview", "/movies", "/payments", "/plans", "/upload", "/users"];
+const protectedPaths = ["/overview", "/movies", "/sales", "/payments", "/plans", "/upload", "/users"];
 const authPaths = ["/login"];
 const pinPath = "/pin";
 

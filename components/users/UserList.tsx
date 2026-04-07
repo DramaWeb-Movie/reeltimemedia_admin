@@ -50,9 +50,16 @@ export function UserList({ users, isLoading }: UserListProps) {
               className="border-b border-slate-100 dark:border-slate-800 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors"
             >
               <td className="px-4 py-3">
-                <span className="font-medium text-slate-900 dark:text-white">
-                  {user.full_name || "—"}
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium text-slate-900 dark:text-white">
+                    {user.full_name || "—"}
+                  </span>
+                  {user.blocked && (
+                    <Badge variant="danger" className="text-[10px] uppercase tracking-wide">
+                      Blocked
+                    </Badge>
+                  )}
+                </div>
               </td>
               <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{user.email}</td>
               <td className="px-4 py-3">

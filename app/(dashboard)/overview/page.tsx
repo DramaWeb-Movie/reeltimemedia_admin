@@ -2,12 +2,13 @@
 
 import { StatCard } from "@/components/dashboard/StatCard";
 import { Chart } from "@/components/dashboard/Chart";
+import { TopSales } from "@/components/dashboard/TopSales";
 import { Spinner } from "@/components/ui/Spinner";
 import { useDashboard } from "@/hooks/useDashboard";
 import { DollarSign, Film, ShieldCheck, Users } from "lucide-react";
 
 export default function OverviewPage() {
-  const { stats, chartData, isLoading } = useDashboard();
+  const { stats, chartData, topSales, isLoading } = useDashboard();
 
   if (isLoading) {
     return (
@@ -66,13 +67,20 @@ export default function OverviewPage() {
         />
       </div>
 
-      {chartData && chartData.labels.length > 0 && (
-        <Chart
-          data={chartData}
-          title="Revenue Overview"
-          subtitle="Monthly revenue and subscription counts"
-        />
-      )}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 items-start">
+        {chartData && chartData.labels.length > 0 && (
+          <div className="lg:col-span-2">
+            <Chart
+              data={chartData}
+              title="Revenue Overview"
+              subtitle="Monthly revenue and subscription counts"
+            />
+          </div>
+        )}
+        <div className={chartData && chartData.labels.length > 0 ? "lg:col-span-1" : "lg:col-span-3"}>
+          <TopSales items={topSales} />
+        </div>
+      </div>
     </div>
   );
 }

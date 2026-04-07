@@ -3,12 +3,15 @@ import type {
   DashboardStats,
   RecentActivity,
   RevenueChartData,
+  TopSaleMovie,
 } from "@/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAuth } from "@/lib/auth/requireAuth";
 import { createLogger } from "@/lib/logger";
+import { isPaymentCompleted, rankMoviesBySalesCount } from "@/lib/sales/movie-sales-from-payments";
 
 const log = createLogger("api:dashboard:stats");
+const TOP_SALES_LIMIT = 10;
 
 const EMPTY_STATS: DashboardStats = {
   totalUsers: 0,
@@ -101,12 +104,26 @@ export async function GET() {
     let chartData: RevenueChartData = { labels: [], datasets: [] };
     let paymentActivities: RecentActivity[] = [];
 
-    const { data: paymentsData } = await supabase
+    const { data: paymentsRaw, error: paymentsError } = await supabase
       .from("payments")
-      .select("amount, payment_status, created_at")
-      .eq("payment_status", "completed");
+      .select("*");
 
-    if (paymentsData?.length) {
+    if (paymentsError) {
+      log.error("Dashboard payments query failed", paymentsError);
+    }
+
+    const paymentsData = (paymentsRaw ?? []).filter((row) =>
+      isPaymentCompleted(row as Record<string, unknown>)
+    );
+
+    let topSales: TopSaleMovie[] = [];
+    if (paymentsData.length) {
+      const { data: moviesForTopSales } = await supabase.from("movies").select("id, title");
+      topSales = rankMoviesBySalesCount(
+        paymentsData.map((p) => p as Record<string, unknown>),
+        (moviesForTopSales ?? []) as { id: string; title: string | null }[]
+      ).slice(0, TOP_SALES_LIMIT);
+
       totalRevenue = paymentsData.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
       const thisMonthRevenue = paymentsData
         .filter((p) => (p.created_at ?? "") >= thisMonthStart)
@@ -204,6 +221,7 @@ export async function GET() {
       stats,
       activities,
       chartData,
+      topSales,
     });
   } catch (err) {
     log.error("Dashboard stats error", err);

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { Spinner } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { toastError, toastSuccess } from "@/lib/toast";
@@ -189,11 +190,7 @@ export function MovieList({
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="shrink-0 w-9 h-12 rounded-md overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
                         {movie.thumbnail_url ? (
-                          <img
-                            src={movie.thumbnail_url}
-                            alt={movie.title}
-                            className="w-full h-full object-cover"
-                          />
+                          <Image src={movie.thumbnail_url} alt={movie.title} width={36} height={48} unoptimized className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-slate-400">
                             <Video className="w-4 h-4" />

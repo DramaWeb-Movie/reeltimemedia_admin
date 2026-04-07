@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { uploadVideo, uploadThumbnail } from "@/lib/r2/upload";
 import { requireAuth } from "@/lib/auth/requireAuth";
-import { notifyTelegramNewMovie } from "@/lib/notifications/telegram";
+import { notifyNewMovieChannels } from "@/lib/notifications/new-movie-channels";
 import { createLogger } from "@/lib/logger";
 import { validateTitle, validateVideoAndThumbnail } from "@/lib/validations";
 
@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await notifyTelegramNewMovie({
+    await notifyNewMovieChannels({
       movieId,
       title: title.trim(),
       type: "single",

@@ -28,10 +28,15 @@ export function UserCard({ user }: UserCardProps) {
               {user.full_name || "No name"}
             </h3>
             <p className="text-sm text-slate-600 dark:text-slate-400 truncate">{user.email}</p>
-            <div className="flex items-center gap-2 mt-2">
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
               <Badge variant={subscriptionBadge[user.subscription_type]}>
                 {user.subscription_type}
               </Badge>
+              {user.blocked && (
+                <Badge variant="danger" className="text-[10px] uppercase tracking-wide">
+                  Blocked
+                </Badge>
+              )}
               {user.subscription_expires_at && user.subscription_type === "premium" && (
                 <span className="text-xs text-slate-600 dark:text-slate-500">
                   Expires {new Date(user.subscription_expires_at).toLocaleDateString()}

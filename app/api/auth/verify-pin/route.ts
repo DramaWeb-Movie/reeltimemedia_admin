@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { timingSafeEqual } from "node:crypto";
 
 const PIN_COOKIE = "reeltime-admin-pin";
 const PIN_MAX_AGE = 60 * 60; // 1 hour
@@ -7,6 +8,21 @@ const MAX_ATTEMPTS = 5;
 const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 
 const attempts = new Map<string, { count: number; resetAt: number }>();
+
+function safeEqual(a: string, b: string): boolean {
+  const aBuf = Buffer.from(a);
+  const bBuf = Buffer.from(b);
+  if (aBuf.length !== bBuf.length) return false;
+  return timingSafeEqual(aBuf, bBuf);
+}
+
+function pruneAttempts(now: number): void {
+  for (const [key, value] of attempts.entries()) {
+    if (now > value.resetAt) {
+      attempts.delete(key);
+    }
+  }
+}
 
 function getClientIp(req: NextRequest): string {
   return (
@@ -18,6 +34,7 @@ function getClientIp(req: NextRequest): string {
 
 function isRateLimited(ip: string): boolean {
   const now = Date.now();
+  pruneAttempts(now);
   const entry = attempts.get(ip);
   if (!entry || now > entry.resetAt) {
     attempts.set(ip, { count: 1, resetAt: now + WINDOW_MS });
@@ -58,7 +75,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (pin !== expectedPin) {
+    if (!safeEqual(pin, expectedPin)) {
       return NextResponse.json({ error: "Invalid PIN" }, { status: 401 });
     }
 

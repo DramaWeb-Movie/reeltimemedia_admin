@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 const navItems = [
   { href: "/overview", label: "Overview", icon: LayoutDashboardIcon },
   { href: "/movies", label: "Movies", icon: FilmIcon },
+  { href: "/sales", label: "Sales", icon: SalesIcon },
   { href: "/plans", label: "Subscription Plans", icon: SubscriptionIcon },
   { href: "/users", label: "Users", icon: UsersIcon },
   { href: "/payments", label: "Payments", icon: CreditCardIcon },
@@ -53,6 +54,19 @@ function CreditCardIcon({ className }: { className?: string }) {
   );
 }
 
+function SalesIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+      />
+    </svg>
+  );
+}
+
 function UploadIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -65,7 +79,7 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-52 flex-shrink-0 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/50 flex flex-col">
+    <aside className="w-52 shrink-0 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/50 flex flex-col">
       <div className="p-3 border-b border-slate-200 dark:border-slate-800">
         <Link href="/overview" className="flex items-center gap-2">
           <Image

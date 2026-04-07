@@ -1,22 +1,34 @@
 "use client";
 
-import { useState, useEffect, useCallback, memo } from "react";
-import { Card } from "@/components/ui/Card";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Spinner } from "@/components/ui/Spinner";
 import { Modal } from "@/components/ui/Modal";
-import type { SubscriptionPlan } from "@/types";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+  TableEmpty,
+} from "@/components/ui/Table";
+import { type SubscriptionPlan, type BillingPeriod, BILLING_PERIOD_OPTIONS } from "@/types";
 
-const BILLING_PERIOD_OPTIONS = [
-  { value: "monthly", label: "Monthly" },
-  { value: "yearly", label: "Yearly" },
-];
+const PRICE_SUFFIX: Record<BillingPeriod, string> = {
+  weekly: "/wk",
+  monthly: "/mo",
+  three_months: "/3 mo",
+  six_months: "/6 mo",
+  yearly: "/yr",
+};
 
 function formatPrice(plan: SubscriptionPlan) {
-  const period = plan.billing_period === "monthly" ? "/mo" : "/yr";
-  return `$${plan.price.toFixed(2)}${period}`;
+  const suffix = PRICE_SUFFIX[plan.billing_period];
+  const symbol = plan.currency === "USD" ? "$" : "";
+  return `${symbol}${plan.price.toFixed(2)}${plan.currency !== "USD" ? ` ${plan.currency}` : ""}${suffix}`;
 }
 
 async function fetchPlansList(signal?: AbortSignal): Promise<SubscriptionPlan[]> {
@@ -26,30 +38,6 @@ async function fetchPlansList(signal?: AbortSignal): Promise<SubscriptionPlan[]>
   return data.plans ?? [];
 }
 
-type PlanCardProps = {
-  plan: SubscriptionPlan;
-  onEdit: (plan: SubscriptionPlan) => void;
-};
-
-const PlanCard = memo(function PlanCard({ plan, onEdit }: PlanCardProps) {
-  return (
-    <Card className="hover:border-slate-300 dark:hover:border-slate-700 transition-colors">
-      <div className="flex items-start justify-between">
-        <div>
-          <h3 className="font-semibold text-slate-900 dark:text-white">{plan.name}</h3>
-          <p className="mt-1 text-2xl font-bold text-red-400">{formatPrice(plan)}</p>
-          {plan.description && (
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">{plan.description}</p>
-          )}
-        </div>
-        <Button variant="ghost" size="sm" onClick={() => onEdit(plan)}>
-          Edit
-        </Button>
-      </div>
-    </Card>
-  );
-});
-
 export default function PlansPage() {
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -57,10 +45,15 @@ export default function PlansPage() {
   const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<{
+    name: string;
+    price: string;
+    billing_period: BillingPeriod;
+    description: string;
+  }>({
     name: "",
     price: "",
-    billing_period: "monthly" as "monthly" | "yearly",
+    billing_period: "monthly",
     description: "",
   });
 
@@ -144,14 +137,6 @@ export default function PlansPage() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -164,23 +149,55 @@ export default function PlansPage() {
         <Button onClick={handleOpenAdd}>Add Plan</Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {plans.map((plan) => (
-          <PlanCard key={plan.id} plan={plan} onEdit={handleEditPlan} />
-        ))}
-      </div>
-
-      {plans.length === 0 && (
-        <Card className="text-center py-12">
-          <p className="text-slate-600 dark:text-slate-500">No subscription plans yet.</p>
-          <p className="text-sm text-slate-600 mt-1">
-            Add a plan so users can subscribe to watch series.
-          </p>
-          <Button className="mt-4" onClick={handleOpenAdd}>
-            Add Plan
-          </Button>
-        </Card>
-      )}
+      <Table tableClassName="min-w-[720px]">
+        <TableHeader>
+          <TableHead>Name</TableHead>
+          <TableHead className="text-right">Price</TableHead>
+          <TableHead>Description</TableHead>
+          <TableHead>Updated</TableHead>
+          <TableHead className="text-right w-28">Actions</TableHead>
+        </TableHeader>
+        <TableBody>
+          {isLoading ? (
+            <TableRow>
+              <td colSpan={5} className="px-6 py-16 text-center">
+                <Spinner size="lg" className="mx-auto" />
+              </td>
+            </TableRow>
+          ) : plans.length === 0 ? (
+            <TableEmpty
+              colSpan={5}
+              message="No subscription plans yet. Add a plan so users can subscribe to watch series."
+            />
+          ) : (
+            plans.map((plan) => (
+              <TableRow key={plan.id}>
+                <TableCell className="font-medium text-slate-900 dark:text-white">{plan.name}</TableCell>
+                <TableCell className="text-right tabular-nums text-red-500 dark:text-red-400 font-semibold">
+                  {formatPrice(plan)}
+                </TableCell>
+                <TableCell className="max-w-[280px]">
+                  {plan.description ? (
+                    <span className="block truncate text-slate-600 dark:text-slate-400" title={plan.description}>
+                      {plan.description}
+                    </span>
+                  ) : (
+                    <span className="text-slate-500 dark:text-slate-500">—</span>
+                  )}
+                </TableCell>
+                <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-400 tabular-nums text-sm">
+                  {new Date(plan.updated_at).toLocaleDateString()}
+                </TableCell>
+                <TableCell className="text-right">
+                  <Button variant="ghost" size="sm" onClick={() => handleEditPlan(plan)}>
+                    Edit
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
 
       <Modal
         isOpen={showModal}
@@ -212,7 +229,7 @@ export default function PlansPage() {
             onChange={(e) =>
               setForm((f) => ({
                 ...f,
-                billing_period: e.target.value as "monthly" | "yearly",
+                billing_period: e.target.value as BillingPeriod,
               }))
             }
           />

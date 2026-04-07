@@ -1,21 +1,7 @@
 import { createLogger } from "@/lib/logger";
+import { buildMovieUrl, type NewMovieNotificationInput } from "@/lib/notifications/new-movie-input";
 
 const log = createLogger("notifications:telegram");
-
-interface NewMovieNotificationInput {
-  movieId: string;
-  title?: string | null;
-  type?: "single" | "series" | string | null;
-  status?: "draft" | "published" | string | null;
-}
-
-function buildMovieUrl(baseUrl: string, movieId: string): string {
-  const normalizedBase = baseUrl.trim().replace(/\/$/, "");
-  if (normalizedBase.includes("movie_id")) {
-    return normalizedBase.replaceAll("movie_id", movieId);
-  }
-  return `${normalizedBase}/${movieId}`;
-}
 
 export async function notifyTelegramNewMovie(input: NewMovieNotificationInput): Promise<void> {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;

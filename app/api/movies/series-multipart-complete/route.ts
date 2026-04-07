@@ -4,7 +4,7 @@ import { completeMultipartUpload, abortMultipartUpload } from "@/lib/r2/multipar
 import { getR2Config } from "@/lib/r2/client";
 import { requireAuth } from "@/lib/auth/requireAuth";
 import { createLogger } from "@/lib/logger";
-import { notifyTelegramNewMovie } from "@/lib/notifications/telegram";
+import { notifyNewMovieChannels } from "@/lib/notifications/new-movie-channels";
 import { validateFinalStatus, validateKeyBelongsToMovie, validateMovieId } from "@/lib/validations";
 import { enqueueTranscodeJob } from "@/lib/upload/transcode";
 import { hlsOutputPrefixFromSourceVideoKey } from "@/lib/r2/storage-path";
@@ -164,7 +164,7 @@ export async function POST(request: NextRequest) {
       })
     );
 
-    await notifyTelegramNewMovie({
+    await notifyNewMovieChannels({
       movieId,
       title: movieRow?.title ?? null,
       type: movieRow?.type ?? "series",

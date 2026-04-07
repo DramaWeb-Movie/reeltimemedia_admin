@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -77,7 +78,7 @@ export function MovieHeroSection({ movie, id, listHref, isDeleting, onDeleteClic
           <div className="w-full max-w-55 mx-auto lg:mx-0">
             <div className="aspect-2/3 rounded-2xl overflow-hidden ring-1 ring-slate-200/60 dark:ring-slate-700/70 shadow-lg bg-slate-200 dark:bg-slate-800">
               {movie.thumbnail_url ? (
-                <img src={movie.thumbnail_url} alt={movie.title} className="w-full h-full object-cover" />
+                <Image src={movie.thumbnail_url} alt={movie.title} width={220} height={330} unoptimized className="w-full h-full object-cover" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-slate-400 dark:text-slate-500">
                   <Film className="w-16 h-16" />
