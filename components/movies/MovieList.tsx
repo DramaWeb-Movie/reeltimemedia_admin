@@ -45,6 +45,31 @@ const STATUS_STYLES: Record<MovieDisplayStatus, string> = {
   uploading: "bg-blue-500/15   text-blue-600   dark:text-blue-400   ring-1 ring-blue-500/25",
 };
 
+type EncodingStatus = NonNullable<Movie["encoding_status"]>;
+
+const ENCODING_STATUS_STYLES: Record<EncodingStatus, string> = {
+  pending: "bg-slate-500/10 text-slate-600 dark:text-slate-400 ring-1 ring-slate-500/20",
+  processing: "bg-blue-500/15 text-blue-600 dark:text-blue-400 ring-1 ring-blue-500/25",
+  ready: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 ring-1 ring-emerald-500/25",
+  failed: "bg-red-500/15 text-red-600 dark:text-red-400 ring-1 ring-red-500/25",
+};
+
+function TranscodeStatusBadge({ status }: { status: Movie["encoding_status"] }) {
+  if (!status) {
+    return (
+      <span className="text-slate-400 dark:text-slate-500 tabular-nums" title="No transcode job or not applicable">
+        —
+      </span>
+    );
+  }
+  const style = ENCODING_STATUS_STYLES[status] ?? ENCODING_STATUS_STYLES.pending;
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium capitalize ${style}`}>
+      {status}
+    </span>
+  );
+}
+
 function StatusBadge({ status }: { status: MovieDisplayStatus }) {
   const style = STATUS_STYLES[status] ?? STATUS_STYLES.draft;
   return (
@@ -163,6 +188,9 @@ export function MovieList({
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   Status
                 </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
+                  Transcode
+                </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   {variant === "series" ? "Episodes" : "Price"}
                 </th>
@@ -218,15 +246,23 @@ export function MovieList({
                     <StatusBadge status={movie.status} />
                   </td>
 
+                  {/* Transcode / encoding */}
+                  <td
+                    className="px-4 py-3 whitespace-nowrap"
+                    title={movie.encoding_error ?? undefined}
+                  >
+                    <TranscodeStatusBadge status={movie.encoding_status} />
+                  </td>
+
                   {/* Price / Episodes */}
                   <td className="px-4 py-3 text-slate-700 dark:text-slate-300 whitespace-nowrap tabular-nums">
                     {variant === "series"
                       ? movie.total_episodes != null
                         ? `${movie.total_episodes} ep${movie.total_episodes !== 1 ? "s" : ""}`
                         : "—"
-                      : movie.price != null
+                      : movie.price != null && movie.price > 0
                         ? `$${movie.price.toFixed(2)}`
-                        : "—"}
+                        : "Free"}
                   </td>
 
                   {/* Duration */}

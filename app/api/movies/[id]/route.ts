@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import type { Movie } from "@/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAuth } from "@/lib/auth/requireAuth";
+import { deleteR2Objects, listR2ObjectKeysByPrefix } from "@/lib/r2/delete";
+import {
+  hlsOutputPrefixFromSourceVideoKey,
+  isR2KeyForMovie,
+  objectKeyFromStoredFileUrl,
+} from "@/lib/r2/storage-path";
 
 function mapSupabaseRow(row: Record<string, unknown>): Movie {
   return {
@@ -28,6 +34,74 @@ function mapSupabaseRow(row: Record<string, unknown>): Movie {
     created_at: String(row.created_at ?? ""),
     updated_at: String(row.updated_at ?? ""),
   };
+}
+
+type EpisodeMediaRow = {
+  video_url: string | null;
+  hls_manifest_url: string | null;
+};
+
+function collectMovieOwnedObjectKeys(
+  movieId: string,
+  publicUrl: string,
+  urls: Array<string | null | undefined>
+): string[] {
+  return urls
+    .map((url) => (url ? objectKeyFromStoredFileUrl(url, publicUrl) : null))
+    .filter((key): key is string => Boolean(key))
+    .filter((key) => isR2KeyForMovie(key, movieId));
+}
+
+async function collectMovieRelatedR2Keys(
+  movieId: string,
+  publicUrl: string,
+  movie: Pick<Movie, "video_url" | "thumbnail_url" | "hls_manifest_url">,
+  episodes: EpisodeMediaRow[]
+): Promise<string[]> {
+  const directKeys = collectMovieOwnedObjectKeys(movieId, publicUrl, [
+    movie.video_url,
+    movie.thumbnail_url,
+    movie.hls_manifest_url,
+    ...episodes.flatMap((ep) => [ep.video_url, ep.hls_manifest_url]),
+  ]);
+
+  const hlsPrefixes = directKeys
+    .filter((key) => key.endsWith(".m3u8") || key.includes("/hls/"))
+    .map((key) => {
+      if (key.endsWith(".m3u8")) {
+        const hlsIndex = key.indexOf("/hls/");
+        if (hlsIndex !== -1) {
+          return key.slice(0, hlsIndex + "/hls".length);
+        }
+      }
+      const hlsIndex = key.indexOf("/hls/");
+      return hlsIndex === -1 ? key : key.slice(0, hlsIndex + "/hls".length);
+    });
+
+  if (movie.video_url) {
+    const sourceVideoKey = objectKeyFromStoredFileUrl(movie.video_url, publicUrl);
+    if (sourceVideoKey && isR2KeyForMovie(sourceVideoKey, movieId)) {
+      hlsPrefixes.push(hlsOutputPrefixFromSourceVideoKey(sourceVideoKey));
+    }
+  }
+
+  for (const ep of episodes) {
+    if (!ep.video_url) continue;
+    const epVideoKey = objectKeyFromStoredFileUrl(ep.video_url, publicUrl);
+    if (epVideoKey && isR2KeyForMovie(epVideoKey, movieId)) {
+      hlsPrefixes.push(hlsOutputPrefixFromSourceVideoKey(epVideoKey));
+    }
+  }
+
+  const prefixMatches = await Promise.all(
+    Array.from(new Set(hlsPrefixes))
+      .filter((prefix) => isR2KeyForMovie(prefix, movieId))
+      .map((prefix) => listR2ObjectKeysByPrefix(prefix))
+  );
+
+  return Array.from(new Set([...directKeys, ...prefixMatches.flat()])).filter((key) =>
+    isR2KeyForMovie(key, movieId)
+  );
 }
 
 export async function GET(
@@ -131,6 +205,34 @@ export async function DELETE(
   try {
     const { id } = await params;
     const supabase = createAdminClient();
+    const { data: movieRow, error: movieError } = await supabase
+      .from("movies")
+      .select("id, video_url, thumbnail_url, hls_manifest_url")
+      .eq("id", id)
+      .single();
+
+    if (movieError || !movieRow) {
+      return NextResponse.json({ error: "Movie not found" }, { status: 404 });
+    }
+
+    const { data: episodeRows } = await supabase
+      .from("series_episodes")
+      .select("video_url, hls_manifest_url")
+      .eq("movie_id", id);
+
+    const publicUrl = process.env.R2_PUBLIC_URL ?? "";
+    let r2KeysToDelete: string[] = [];
+    try {
+      r2KeysToDelete = await collectMovieRelatedR2Keys(
+        id,
+        publicUrl,
+        movieRow as Pick<Movie, "video_url" | "thumbnail_url" | "hls_manifest_url">,
+        (episodeRows ?? []) as EpisodeMediaRow[]
+      );
+    } catch (err) {
+      console.warn("Failed to prepare R2 keys for deletion", { movieId: id, err });
+    }
+
     const { error } = await supabase.from("movies").delete().eq("id", id);
 
     if (error) {
@@ -139,6 +241,19 @@ export async function DELETE(
         { status: 500 }
       );
     }
+
+    if (r2KeysToDelete.length > 0) {
+      try {
+        await deleteR2Objects(r2KeysToDelete);
+      } catch (err) {
+        console.warn("Movie deleted from DB, but failed to delete some R2 objects", {
+          movieId: id,
+          err,
+          objectCount: r2KeysToDelete.length,
+        });
+      }
+    }
+
     return NextResponse.json({ success: true });
   } catch {
     return NextResponse.json({ error: "Failed to delete movie" }, { status: 500 });
