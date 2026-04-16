@@ -24,35 +24,41 @@ export async function GET(request: Request) {
     const toParam = searchParams.get("to");
     const page = toPage(searchParams.get("page"));
 
-    if (!fromParam || !toParam) {
-      return NextResponse.json(
-        { error: "Query parameters from and to are required (ISO 8601 timestamps)." },
-        { status: 400 }
-      );
-    }
+    const hasFrom = Boolean(fromParam);
+    const hasTo = Boolean(toParam);
+    const rangeStart = hasFrom ? new Date(fromParam as string) : null;
+    const rangeEnd = hasTo ? new Date(toParam as string) : null;
 
-    const rangeStart = new Date(fromParam);
-    const rangeEnd = new Date(toParam);
-    if (Number.isNaN(rangeStart.getTime()) || Number.isNaN(rangeEnd.getTime())) {
-      return NextResponse.json({ error: "Invalid from or to date." }, { status: 400 });
+    if (rangeStart && Number.isNaN(rangeStart.getTime())) {
+      return NextResponse.json({ error: "Invalid from date." }, { status: 400 });
     }
-    if (rangeStart.getTime() > rangeEnd.getTime()) {
+    if (rangeEnd && Number.isNaN(rangeEnd.getTime())) {
+      return NextResponse.json({ error: "Invalid to date." }, { status: 400 });
+    }
+    if (rangeStart && rangeEnd && rangeStart.getTime() > rangeEnd.getTime()) {
       return NextResponse.json(
         { error: "from must be on or before to." },
         { status: 400 }
       );
     }
 
-    const startIso = rangeStart.toISOString();
-    const endIso = rangeEnd.toISOString();
+    const startIso = rangeStart?.toISOString() ?? null;
+    const endIso = rangeEnd?.toISOString() ?? null;
 
     const supabase = createAdminClient();
 
-    const { data: paymentsRaw, error: paymentsError } = await supabase
+    let paymentsQuery = supabase
       .from("payments")
-      .select("*")
-      .gte("created_at", startIso)
-      .lte("created_at", endIso);
+      .select("*");
+
+    if (startIso) {
+      paymentsQuery = paymentsQuery.gte("created_at", startIso);
+    }
+    if (endIso) {
+      paymentsQuery = paymentsQuery.lte("created_at", endIso);
+    }
+
+    const { data: paymentsRaw, error: paymentsError } = await paymentsQuery;
 
     if (paymentsError) {
       log.error("Sales movies payments query failed", paymentsError);

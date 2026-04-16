@@ -15,6 +15,7 @@ function mapSupabaseRow(row: Record<string, unknown>): Movie {
     thumbnail_url: (row.thumbnail_url as string) ?? null,
     cover_url: (row.cover_url as string) ?? null,
     promotion_banner_url: (row.promotion_banner_url as string) ?? null,
+    is_promotion_hero: Boolean(row.is_promotion_hero),
     video_url: (row.video_url as string) ?? null,
     status: (row.status as Movie["status"]) ?? "draft",
     type: (row.type as Movie["type"]) ?? "single",
@@ -57,7 +58,11 @@ export async function GET(request: Request) {
       .order("created_at", { ascending: false })
       .range(from, to);
 
-    if (status) query = query.eq("status", status);
+    if (status === "promotion") {
+      query = query.eq("is_promotion_hero", true);
+    } else if (status) {
+      query = query.eq("status", status);
+    }
     if (type) query = query.eq("type", type);
     if (search) query = query.or(`title.ilike.%${search}%,genre.ilike.%${search}%`);
 

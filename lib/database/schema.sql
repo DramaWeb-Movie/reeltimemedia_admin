@@ -13,6 +13,7 @@
 --   thumbnail_url TEXT,
 --   cover_url TEXT,
 --   promotion_banner_url TEXT, -- dedicated banner art for promoted placements
+--   is_promotion_hero BOOLEAN DEFAULT FALSE, -- whether web client should place this movie in promotion hero
 --   video_url TEXT,
 --   status VARCHAR(50) DEFAULT 'draft', -- draft, published, archived
 --   type VARCHAR(50) NOT NULL, -- 'series' or 'single'
@@ -54,7 +55,7 @@
 -- CREATE TABLE payments (
 --   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 --   user_id UUID REFERENCES user_profiles(id) ON DELETE CASCADE,
---   movie_id UUID REFERENCES movies(id) ON DELETE SET NULL, -- optional; used for dashboard top sales
+--   movie_id UUID REFERENCES movies(id) ON DELETE CASCADE, -- optional; used for dashboard top sales
 --   amount DECIMAL(10, 2) NOT NULL,
 --   currency VARCHAR(3) DEFAULT 'USD',
 --   payment_method VARCHAR(50), -- credit_card, paypal, etc.

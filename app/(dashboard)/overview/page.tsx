@@ -3,7 +3,7 @@
 import { StatCard } from "@/components/dashboard/StatCard";
 import { Chart } from "@/components/dashboard/Chart";
 import { TopSales } from "@/components/dashboard/TopSales";
-import { Spinner } from "@/components/ui/Spinner";
+import { PageLoadingState } from "@/components/ui/PageLoadingState";
 import { useDashboard } from "@/hooks/useDashboard";
 import { DollarSign, Film, ShieldCheck, Users } from "lucide-react";
 
@@ -12,9 +12,10 @@ export default function OverviewPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-100">
-        <Spinner size="lg" />
-      </div>
+      <PageLoadingState
+        title="Loading dashboard overview"
+        description="Compiling stats, revenue trends, and top sales."
+      />
     );
   }
 

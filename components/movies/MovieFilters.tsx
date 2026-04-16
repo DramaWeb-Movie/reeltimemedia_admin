@@ -51,6 +51,7 @@ export function MovieFilters({
             { value: "draft", label: "Draft" },
             { value: "published", label: "Published" },
             { value: "archived", label: "Archived" },
+            { value: "promotion", label: "Promotion" },
           ]}
           value={status}
           onChange={(e) => onStatusChange(e.target.value)}

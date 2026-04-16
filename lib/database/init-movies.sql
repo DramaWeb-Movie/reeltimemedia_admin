@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS movies (
   thumbnail_url TEXT,
   cover_url TEXT,
   promotion_banner_url TEXT,
+  is_promotion_hero BOOLEAN NOT NULL DEFAULT FALSE,
   video_url TEXT,
   status VARCHAR(50) DEFAULT 'draft',
   type VARCHAR(50) NOT NULL DEFAULT 'single',

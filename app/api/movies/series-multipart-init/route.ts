@@ -44,6 +44,7 @@ export async function POST(request: NextRequest) {
     releaseDate,
     duration,
     trailerUrl,
+    isPromotionHero = false,
     finalStatus = "draft",
     thumbnailPhoneType,
     thumbnailPhoneSize,
@@ -160,6 +161,7 @@ export async function POST(request: NextRequest) {
       video_url: null,
       trailer_url:
         typeof trailerUrl === "string" && trailerUrl.trim() ? trailerUrl.trim() : null,
+      is_promotion_hero: Boolean(isPromotionHero),
     })
     .select("id")
     .single();

@@ -80,6 +80,7 @@ export default function SingleMovieUploadPage() {
   const [duration, setDuration] = useState("");
   const [status, setStatus] = useState<"draft" | "published">("draft");
   const [trailerUrl, setTrailerUrl] = useState("");
+  const [isPromotionHero, setIsPromotionHero] = useState(false);
 
   const thumbnailArtworkFile = artworkByRole["thumbnail-laptop"] ?? artworkByRole["thumbnail-phone"];
   const coverArtworkFile = artworkByRole["cover-phone"] ?? artworkByRole["cover-laptop"];
@@ -154,6 +155,7 @@ export default function SingleMovieUploadPage() {
           duration: duration ? parseInt(duration, 10) : null,
           finalStatus: status,
           trailerUrl,
+          isPromotionHero,
           videoType: singleVideoFile.type,
           videoSize: singleVideoFile.size,
           thumbnailPhoneType: thumbnailArtworkFile.type,
@@ -491,6 +493,17 @@ export default function SingleMovieUploadPage() {
               </div>
               <Select label="Status" options={[{ value: "draft", label: "Draft" }, { value: "published", label: "Published" }]} value={status} onChange={(e) => setStatus(e.target.value as "draft" | "published")} />
               <Input label="Trailer URL" type="url" value={trailerUrl} onChange={(e) => setTrailerUrl(e.target.value)} placeholder="https://youtube.com/..." hint="Optional" />
+              <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-sm dark:border-slate-700 dark:bg-slate-800/40">
+                <input
+                  type="checkbox"
+                  checked={isPromotionHero}
+                  onChange={(e) => setIsPromotionHero(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-red-600 focus:ring-red-500"
+                />
+                <span className="text-slate-700 dark:text-slate-300">
+                  Show this movie in promotion hero section
+                </span>
+              </label>
             </div>
           </Card>
         )}
@@ -516,6 +529,12 @@ export default function SingleMovieUploadPage() {
                 <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Price</p>
                 <p className="font-medium text-slate-900 dark:text-white">
                   {pricingType === "free" ? "Free" : `$${price || "0.00"}`}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Promotion hero</p>
+                <p className="font-medium text-slate-900 dark:text-white">
+                  {isPromotionHero ? "Yes" : "No"}
                 </p>
               </div>
             </div>

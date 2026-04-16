@@ -3,11 +3,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Spinner } from "@/components/ui/Spinner";
+import { PageLoadingState } from "@/components/ui/PageLoadingState";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { toastError, toastSuccess } from "@/lib/toast";
 import type { Movie, MovieStatus } from "@/types";
-import { formatGenresDisplay } from "@/lib/genre-utils";
 import { ChevronLeft, ChevronRight, Film, Pencil, Trash2, Video } from "lucide-react";
 
 interface MovieListProps {
@@ -148,9 +147,11 @@ export function MovieList({
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="lg" />
-      </div>
+      <PageLoadingState
+        title="Loading movie library"
+        description="Gathering titles, filters, and status details."
+        minHeightClass="min-h-[320px]"
+      />
     );
   }
 
@@ -188,9 +189,6 @@ export function MovieList({
                   Khmer Title
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  Genres
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   Status
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
@@ -201,9 +199,6 @@ export function MovieList({
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   Duration
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  Released
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   Added
@@ -250,13 +245,6 @@ export function MovieList({
                     {movie.title_kh ?? "—"}
                   </td>
 
-                  {/* Genres */}
-                  <td className="px-4 py-3 text-slate-500 dark:text-slate-400 max-w-52">
-                    <span className="line-clamp-2 text-sm" title={formatGenresDisplay(movie.genre) || undefined}>
-                      {formatGenresDisplay(movie.genre) || "—"}
-                    </span>
-                  </td>
-
                   {/* Status */}
                   <td className="px-4 py-3 whitespace-nowrap">
                     <StatusBadge status={movie.status} />
@@ -284,11 +272,6 @@ export function MovieList({
                   {/* Duration */}
                   <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap tabular-nums">
                     {formatDuration(movie.duration)}
-                  </td>
-
-                  {/* Release date */}
-                  <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                    {formatDate(movie.release_date)}
                   </td>
 
                   {/* Created at */}

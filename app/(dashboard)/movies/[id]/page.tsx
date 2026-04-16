@@ -5,8 +5,8 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Spinner } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { PageLoadingState } from "@/components/ui/PageLoadingState";
 import { MovieHeroSection } from "@/components/movies/detail/MovieHeroSection";
 import { MovieMediaSection } from "@/components/movies/detail/MovieMediaSection";
 import { SeriesEpisodesSection } from "@/components/movies/detail/SeriesEpisodesSection";
@@ -71,19 +71,10 @@ export default function MovieDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-[420px] overflow-hidden rounded-[32px] border border-slate-200/80 bg-linear-to-br from-white via-slate-50 to-slate-100 dark:border-slate-700/80 dark:from-slate-900 dark:via-slate-900/80 dark:to-slate-800/70">
-        <div className="flex h-full min-h-[420px] flex-col items-center justify-center gap-4 px-6 text-center">
-          <div className="rounded-full border border-slate-200/80 bg-white/90 p-4 shadow-sm dark:border-slate-700/80 dark:bg-slate-900/90">
-            <Spinner size="lg" />
-          </div>
-          <div className="space-y-1">
-            <p className="text-sm font-semibold text-slate-900 dark:text-white">Loading movie workspace</p>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Bringing together artwork, playback, and admin details.
-            </p>
-          </div>
-        </div>
-      </div>
+      <PageLoadingState
+        title="Loading movie workspace"
+        description="Bringing together artwork, playback, and admin details."
+      />
     );
   }
 

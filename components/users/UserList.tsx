@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Spinner } from "@/components/ui/Spinner";
+import { PageLoadingState } from "@/components/ui/PageLoadingState";
 import { Badge } from "@/components/ui/Badge";
 import type { User } from "@/types";
 
@@ -17,9 +17,11 @@ const subscriptionBadge: Record<User["subscription_type"], "default" | "success"
 export function UserList({ users, isLoading }: UserListProps) {
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <Spinner size="lg" />
-      </div>
+      <PageLoadingState
+        title="Loading users"
+        description="Getting the latest account and subscription data."
+        minHeightClass="min-h-[280px]"
+      />
     );
   }
 

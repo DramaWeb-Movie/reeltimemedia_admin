@@ -94,6 +94,7 @@ export default function SeriesUploadPage() {
   const [status, setStatus] = useState<SeriesStatus>("draft");
   const [cast, setCast] = useState("");
   const [trailerUrl, setTrailerUrl] = useState("");
+  const [isPromotionHero, setIsPromotionHero] = useState(false);
   const [artworkByRole, setArtworkByRole] = useState<Record<ArtworkRole, File | null>>(emptyArtwork);
   const thumbnailArtworkFile = artworkByRole["thumbnail-laptop"] ?? artworkByRole["thumbnail-phone"];
   const coverArtworkFile = artworkByRole["cover-phone"] ?? artworkByRole["cover-laptop"];
@@ -281,6 +282,7 @@ export default function SeriesUploadPage() {
           releaseDate: releaseYearToDate(releaseDate),
           duration: duration ? parseInt(duration, 10) : null,
           trailerUrl: trailerUrl.trim() || null,
+          isPromotionHero,
           finalStatus: status,
           thumbnailPhoneType: thumbnailArtworkFile.type,
           thumbnailPhoneSize: thumbnailArtworkFile.size,
@@ -499,28 +501,43 @@ export default function SeriesUploadPage() {
 
         {/* Step 2: Details */}
         {step === 2 && (
-          <StepDetailsCard
-            title={title}
-            onTitleChange={setTitle}
-            titleKh={titleKh}
-            onTitleKhChange={setTitleKh}
-            description={description}
-            onDescriptionChange={setDescription}
-            genres={genres}
-            onGenresChange={setGenres}
-            cast={cast}
-            onCastChange={setCast}
-            releaseDate={releaseDate}
-            onReleaseDateChange={setReleaseDate}
-            duration={duration}
-            onDurationChange={setDuration}
-            status={status}
-            onStatusChange={setStatus}
-            trailerUrl={trailerUrl}
-            onTrailerUrlChange={setTrailerUrl}
-            artworkByRole={artworkByRole}
-            onArtworkChange={handleArtworkChange}
-          />
+          <div className="space-y-4">
+            <StepDetailsCard
+              title={title}
+              onTitleChange={setTitle}
+              titleKh={titleKh}
+              onTitleKhChange={setTitleKh}
+              description={description}
+              onDescriptionChange={setDescription}
+              genres={genres}
+              onGenresChange={setGenres}
+              cast={cast}
+              onCastChange={setCast}
+              releaseDate={releaseDate}
+              onReleaseDateChange={setReleaseDate}
+              duration={duration}
+              onDurationChange={setDuration}
+              status={status}
+              onStatusChange={setStatus}
+              trailerUrl={trailerUrl}
+              onTrailerUrlChange={setTrailerUrl}
+              artworkByRole={artworkByRole}
+              onArtworkChange={handleArtworkChange}
+            />
+            <Card>
+              <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-sm dark:border-slate-700 dark:bg-slate-800/40">
+                <input
+                  type="checkbox"
+                  checked={isPromotionHero}
+                  onChange={(e) => setIsPromotionHero(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-red-600 focus:ring-red-500"
+                />
+                <span className="text-slate-700 dark:text-slate-300">
+                  Show this series in promotion hero section
+                </span>
+              </label>
+            </Card>
+          </div>
         )}
 
         {/* Step 3: Episodes */}

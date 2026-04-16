@@ -14,6 +14,7 @@ export interface Movie {
   thumbnail_url: string | null;
   cover_url: string | null;
   promotion_banner_url?: string | null;
+  is_promotion_hero?: boolean;
   video_url: string | null;
   status: MovieStatus;
   type: MovieType;

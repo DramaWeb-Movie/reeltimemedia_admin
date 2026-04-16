@@ -1,15 +1,8 @@
-import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import type { Movie } from "@/types";
 import { formatGenresDisplay } from "@/lib/genre-utils";
 import {
-  AlertTriangle,
-  CalendarDays,
-  Clapperboard,
   ExternalLink,
-  FileText,
-  Layers3,
-  MonitorPlay,
   UserRound,
 } from "lucide-react";
 
@@ -126,57 +119,7 @@ export function MovieDetailsCard({ movie }: MovieDetailsCardProps) {
   ].filter(Boolean) as Array<{ href: string; label: string; hint: string }>;
 
   return (
-    <Card className="rounded-[28px]">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500 dark:text-slate-400">
-            Admin Snapshot
-          </p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
-            Catalog health
-          </h2>
-          <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
-            The essential metadata your team needs while reviewing this title.
-          </p>
-        </div>
-        <Badge variant={movie.encoding_error ? "danger" : "success"}>
-          {movie.encoding_error ? "Needs attention" : "Healthy"}
-        </Badge>
-      </div>
-
-      <div className="mt-6 grid gap-3 sm:grid-cols-2">
-        <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-900/60">
-          <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
-            <Layers3 className="h-4 w-4" />
-            Type
-          </p>
-          <p className="mt-3 text-sm font-semibold text-slate-900 capitalize dark:text-white">{movie.type}</p>
-        </div>
-        <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-900/60">
-          <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
-            <MonitorPlay className="h-4 w-4" />
-            Encoding
-          </p>
-          <p className="mt-3 text-sm font-semibold capitalize text-slate-900 dark:text-white">
-            {formatTitleCase(encodingStatus)}
-          </p>
-        </div>
-        <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-900/60">
-          <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
-            <Clapperboard className="h-4 w-4" />
-            Media assets
-          </p>
-          <p className="mt-3 text-sm font-semibold text-slate-900 dark:text-white">{assetCount} connected</p>
-        </div>
-        <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-900/60">
-          <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
-            <CalendarDays className="h-4 w-4" />
-            Updated
-          </p>
-          <p className="mt-3 text-sm font-semibold text-slate-900 dark:text-white">{formatDate(movie.updated_at)}</p>
-        </div>
-      </div>
-
+    <Card className="rounded-[28px]">            
       <div className="mt-6 rounded-[24px] border border-slate-200/80 bg-white/80 p-5 dark:border-slate-800 dark:bg-slate-950/40">
         <p className="text-xs font-semibold uppercase tracking-[0.26em] text-slate-500 dark:text-slate-400">
           Metadata
@@ -204,65 +147,7 @@ export function MovieDetailsCard({ movie }: MovieDetailsCardProps) {
         <p className="mt-3 text-sm leading-6 text-slate-700 dark:text-slate-300">
           {movie.cast || "No cast information yet. Adding people here makes the library friendlier for editors and support teams."}
         </p>
-      </div>
-
-      <div className="mt-6 rounded-[24px] border border-slate-200/80 bg-white/80 p-5 dark:border-slate-800 dark:bg-slate-950/40">
-        <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.26em] text-slate-500 dark:text-slate-400">
-          <MonitorPlay className="h-4 w-4" />
-          Resource Links
-        </p>
-        <div className="mt-4 space-y-3">
-          {resourceLinks.length > 0 ? (
-            resourceLinks.map((resource) => (
-              <ResourceLink
-                key={resource.href}
-                href={resource.href}
-                label={resource.label}
-                hint={resource.hint}
-              />
-            ))
-          ) : (
-            <p className="text-sm leading-6 text-slate-500 dark:text-slate-400">
-              No media links available yet. Uploading source video or adding a trailer will populate this area.
-            </p>
-          )}
-        </div>
-      </div>
-
-      <div
-        className={`mt-6 rounded-[24px] border p-5 ${
-          movie.encoding_error
-            ? "border-red-200/80 bg-red-50/80 dark:border-red-500/20 dark:bg-red-500/10"
-            : "border-emerald-200/80 bg-emerald-50/80 dark:border-emerald-500/20 dark:bg-emerald-500/10"
-        }`}
-      >
-        <p
-          className={`inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.26em] ${
-            movie.encoding_error ? "text-red-600 dark:text-red-300" : "text-emerald-700 dark:text-emerald-300"
-          }`}
-        >
-          {movie.encoding_error ? <AlertTriangle className="h-4 w-4" /> : <MonitorPlay className="h-4 w-4" />}
-          Encoding Health
-        </p>
-        <p
-          className={`mt-3 text-sm leading-6 ${
-            movie.encoding_error ? "text-red-900 dark:text-red-100" : "text-emerald-900 dark:text-emerald-100"
-          }`}
-        >
-          {movie.encoding_error || "No encoding errors reported. Playback assets look healthy from an admin perspective."}
-        </p>
-      </div>
-
-      <div className="mt-6 rounded-[24px] border border-slate-200/80 bg-slate-50/70 p-5 dark:border-slate-800 dark:bg-slate-900/40">
-        <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.26em] text-slate-500 dark:text-slate-400">
-          <FileText className="h-4 w-4" />
-          Full Synopsis
-        </p>
-        <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-700 dark:text-slate-300">
-          {movie.description ||
-            "No description yet. A concise synopsis helps your admin team, support staff, and marketers understand the title without opening the edit form."}
-        </p>
-      </div>
+      </div>      
     </Card>
   );
 }

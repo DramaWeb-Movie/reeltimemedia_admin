@@ -102,14 +102,6 @@ export function MovieHeroSection({ movie, id, listHref, isDeleting, onDeleteClic
           </Link>
 
           <div className="flex flex-wrap gap-2">
-            <Link href={`/movies/${id}/promotion`}>
-              <Button
-                variant="outline"
-                className="border-white/20 bg-white/10 text-white hover:border-white/30 hover:bg-white/15 hover:text-white dark:border-white/20 dark:text-white dark:hover:bg-white/15"
-              >
-                Promotion Banner
-              </Button>
-            </Link>
             <Link href={`/movies/${id}/edit`}>
               <Button
                 variant="outline"
@@ -133,7 +125,7 @@ export function MovieHeroSection({ movie, id, listHref, isDeleting, onDeleteClic
         <div className="mt-8 grid gap-8 lg:grid-cols-[240px_minmax(0,1fr)] lg:items-end">
           <div className="mx-auto w-full max-w-60 lg:mx-0">
             <div className="overflow-hidden rounded-[28px] border border-white/15 bg-white/10 shadow-2xl shadow-slate-950/30 backdrop-blur">
-              <div className="aspect-[2/3] overflow-hidden bg-slate-800/70">
+              <div className="aspect-2/3 overflow-hidden bg-slate-800/70">
                 {posterUrl ? (
                   <Image
                     src={posterUrl}

@@ -21,6 +21,7 @@ function mapSupabaseRow(row: Record<string, unknown>): Movie {
     thumbnail_url: (row.thumbnail_url as string) ?? null,
     cover_url: (row.cover_url as string) ?? null,
     promotion_banner_url: (row.promotion_banner_url as string) ?? null,
+    is_promotion_hero: Boolean(row.is_promotion_hero),
     video_url: (row.video_url as string) ?? null,
     status: (row.status as Movie["status"]) ?? "draft",
     type: (row.type as Movie["type"]) ?? "single",
@@ -169,6 +170,7 @@ export async function PATCH(
       thumbnail_url: "thumbnail_url",
       cover_url: "cover_url",
       promotion_banner_url: "promotion_banner_url",
+      is_promotion_hero: "is_promotion_hero",
       video_url: "video_url",
     };
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -253,6 +255,25 @@ export async function DELETE(
       );
     } catch (err) {
       console.warn("Failed to prepare R2 keys for deletion", { movieId: id, err });
+    }
+
+    // Remove dependent sales/payment rows linked to this movie so analytics
+    // and relational integrity stay consistent after movie deletion.
+    const { error: paymentsDeleteError } = await supabase
+      .from("payments")
+      .delete()
+      .eq("movie_id", id);
+
+    if (paymentsDeleteError && paymentsDeleteError.code !== "42703") {
+      return NextResponse.json(
+        { error: paymentsDeleteError.message ?? "Failed to delete related payments" },
+        { status: 500 }
+      );
+    }
+    if (paymentsDeleteError?.code === "42703") {
+      console.warn("payments.movie_id does not exist; skipping related payment deletion", {
+        movieId: id,
+      });
     }
 
     const { error } = await supabase.from("movies").delete().eq("id", id);

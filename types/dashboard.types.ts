@@ -47,7 +47,7 @@ export interface MovieSalesListResponse {
     total: number;
     totalPages: number;
   };
-  /** Inclusive bounds used for the query (ISO 8601, UTC). */
-  rangeStart: string;
-  rangeEnd: string;
+  /** Inclusive bounds used for the query (ISO 8601, UTC), null when not filtered. */
+  rangeStart: string | null;
+  rangeEnd: string | null;
 }

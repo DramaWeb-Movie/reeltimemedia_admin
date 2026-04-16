@@ -9,7 +9,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { CastInput } from "@/components/ui/CastInput";
-import { Spinner } from "@/components/ui/Spinner";
+import { PageLoadingState } from "@/components/ui/PageLoadingState";
 import { SinglePricingSection } from "@/components/movies/edit/SinglePricingSection";
 import { SeriesAccessSection } from "@/components/movies/edit/SeriesAccessSection";
 import { SeriesEpisodesPanel } from "@/components/movies/edit/SeriesEpisodesPanel";
@@ -60,6 +60,7 @@ export default function EditMoviePage() {
   const [duration, setDuration] = useState("");
   const [status, setStatus] = useState<Movie["status"]>("draft");
   const [trailerUrl, setTrailerUrl] = useState("");
+  const [isPromotionHero, setIsPromotionHero] = useState(false);
   const [freeEpisodesCount, setFreeEpisodesCount] = useState("");
   const [totalEpisodes, setTotalEpisodes] = useState("");
   const [subscriptionPlanId, setSubscriptionPlanId] = useState("");
@@ -122,6 +123,7 @@ export default function EditMoviePage() {
           setDuration(m.duration != null ? String(m.duration) : "");
           setStatus(m.status ?? "draft");
           setTrailerUrl(m.trailer_url ?? "");
+          setIsPromotionHero(Boolean(m.is_promotion_hero));
           setFreeEpisodesCount(m.free_episodes_count != null ? String(m.free_episodes_count) : "");
           setTotalEpisodes(m.total_episodes != null ? String(m.total_episodes) : "");
           setSubscriptionPlanId(m.subscription_plan_id ?? "");
@@ -387,8 +389,7 @@ export default function EditMoviePage() {
     }
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSubmit() {
     if (!movie) return;
     setError(null);
     setIsSaving(true);
@@ -404,6 +405,7 @@ export default function EditMoviePage() {
         duration: duration ? Number(duration) : null,
         status,
         trailer_url: trailerUrl.trim() || null,
+        is_promotion_hero: isPromotionHero,
         ...artworkPatch,
       };
       if (movie.type === "single") {
@@ -433,11 +435,7 @@ export default function EditMoviePage() {
   }
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-100">
-        <Spinner size="lg" />
-      </div>
-    );
+    return <PageLoadingState title="Loading edit workspace" description="Preparing movie data and editable fields." />;
   }
 
   if (!movie) {
@@ -474,9 +472,6 @@ export default function EditMoviePage() {
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Edit movie</h1>
         </div>
         <div className="flex items-center gap-2">
-          <Link href={`/movies/${id}/promotion`}>
-            <Button variant="outline" size="sm">Promotion Banner</Button>
-          </Link>
           <Link href={`/movies/${id}`}>
             <Button variant="outline" size="sm">← Back</Button>
           </Link>
@@ -492,7 +487,6 @@ export default function EditMoviePage() {
         </div>
       )}
 
-      <form id="main-form" onSubmit={handleSubmit}>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         {/* ── Left column ─────────────────────────────────────────── */}
@@ -691,12 +685,23 @@ export default function EditMoviePage() {
                 onChange={(e) => setStatus(e.target.value as Movie["status"])}
               />
               <Input label="Trailer URL" type="url" value={trailerUrl} onChange={(e) => setTrailerUrl(e.target.value)} placeholder="https://..." />
+              <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-sm dark:border-slate-700 dark:bg-slate-800/40">
+                <input
+                  type="checkbox"
+                  checked={isPromotionHero}
+                  onChange={(e) => setIsPromotionHero(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-red-600 focus:ring-red-500"
+                />
+                <span className="text-slate-700 dark:text-slate-300">
+                  Show this movie in promotion hero section
+                </span>
+              </label>
             </div>
           </Card>
 
           {/* Save actions */}
           <div className="flex flex-col gap-2">
-            <Button type="submit" form="main-form" isLoading={isSaving} disabled={isSaving} className="w-full justify-center">
+            <Button type="button" onClick={() => void handleSubmit()} isLoading={isSaving} disabled={isSaving} className="w-full justify-center">
               {isSaving ? "Saving…" : "Save changes"}
             </Button>
             <Link href={`/movies/${id}`} className="w-full">
@@ -705,7 +710,6 @@ export default function EditMoviePage() {
           </div>
         </div>
       </div>
-      </form>
 
       {/* Video upload progress modal */}
       {isReplacingVideo && (

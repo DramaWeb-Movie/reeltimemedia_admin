@@ -36,15 +36,22 @@ export function extractMovieIdFromPaymentRow(
   movieIdSet: Set<string>,
   titleLowerToId: Map<string, string>
 ): string | null {
+  const resolveCandidate = (value: unknown): string | null => {
+    if (typeof value !== "string" || value.length === 0) return null;
+    if (movieIdSet.has(value)) return value;
+    const byTitle = titleLowerToId.get(value.trim().toLowerCase());
+    return byTitle ?? null;
+  };
+
   const directKeys = ["movie_id", "content_id", "product_id"] as const;
   for (const key of directKeys) {
-    const v = row[key];
-    if (typeof v === "string" && v.length > 0) return v;
+    const resolved = resolveCandidate(row[key]);
+    if (resolved) return resolved;
   }
   const meta = parsePaymentMetadata(row);
   if (meta) {
-    const mid = meta.movie_id ?? meta.movieId ?? meta.content_id;
-    if (typeof mid === "string" && mid.length > 0) return mid;
+    const resolved = resolveCandidate(meta.movie_id ?? meta.movieId ?? meta.content_id);
+    if (resolved) return resolved;
   }
   const desc = String(row.description ?? "").trim();
   if (!desc) return null;

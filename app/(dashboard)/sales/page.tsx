@@ -20,7 +20,6 @@ import {
   defaultMonthToDateRange,
   endOfDayLocal,
   formatDateInputLocal,
-  isValidDateInput,
   startOfDayLocal,
 } from "@/lib/sales/date-range-local";
 
@@ -50,33 +49,28 @@ function buildPageItems(currentPage: number, totalPages: number): PageItem[] {
 }
 
 export default function SalesPage() {
-  const defaults = useMemo(() => defaultMonthToDateRange(), []);
-  const [fromDate, setFromDate] = useState(defaults.from);
-  const [toDate, setToDate] = useState(defaults.to);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [page, setPage] = useState(1);
 
   const validationError = useMemo(() => {
-    if (!isValidDateInput(fromDate) || !isValidDateInput(toDate)) {
-      return "Enter a valid start and end date.";
-    }
-    if (fromDate > toDate) {
+    if (fromDate && toDate && fromDate > toDate) {
       return "Start date must be on or before end date.";
     }
     return null;
   }, [fromDate, toDate]);
 
   const rangeStartIso = useMemo(() => {
-    if (validationError) return "";
+    if (validationError || !fromDate) return null;
     return startOfDayLocal(fromDate).toISOString();
   }, [fromDate, validationError]);
 
   const rangeEndIso = useMemo(() => {
-    if (validationError) return "";
+    if (validationError || !toDate) return null;
     return endOfDayLocal(toDate).toISOString();
   }, [toDate, validationError]);
 
-  const enabled = !validationError && !!rangeStartIso && !!rangeEndIso;
-  const { data, isLoading, fetchError } = useMovieSales(rangeStartIso, rangeEndIso, page, enabled);
+  const { data, isLoading, fetchError } = useMovieSales(rangeStartIso, rangeEndIso, page);
 
   const totalPages = data?.pagination.totalPages ?? 1;
   const pageItems = useMemo(
@@ -105,7 +99,7 @@ export default function SalesPage() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Sales by movie</h1>
         <p className="mt-1 text-slate-600 dark:text-slate-400">
-          Completed purchases per title for the range you pick (times use your local timezone).
+          Completed purchases per title. By default this shows all-time data; use filters to narrow it.
         </p>
       </div>
 
@@ -116,7 +110,7 @@ export default function SalesPage() {
               label="From"
               type="date"
               value={fromDate}
-              max={toDate}
+              max={toDate || undefined}
               onChange={(e) => {
                 setFromDate(e.target.value);
                 setPage(1);
@@ -128,7 +122,7 @@ export default function SalesPage() {
               label="To"
               type="date"
               value={toDate}
-              min={fromDate}
+              min={fromDate || undefined}
               max={formatDateInputLocal(new Date())}
               onChange={(e) => {
                 setToDate(e.target.value);
@@ -155,10 +149,22 @@ export default function SalesPage() {
           <Button type="button" variant="outline" size="sm" onClick={() => applyPreset("month")}>
             Month to date
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setFromDate("");
+              setToDate("");
+              setPage(1);
+            }}
+          >
+            All time
+          </Button>
         </div>
       </Card>
 
-      {fetchError && enabled && (
+      {fetchError && (
         <p className="text-sm text-red-600 dark:text-red-400" role="alert">
           {fetchError}
         </p>
@@ -171,9 +177,7 @@ export default function SalesPage() {
           <TableHead className="text-right w-32">Sales</TableHead>
         </TableHeader>
         <TableBody>
-          {!enabled ? (
-            <TableEmpty colSpan={3} message="Choose a valid date range to load sales." />
-          ) : isLoading ? (
+          {isLoading ? (
             <TableRow>
               <td colSpan={3} className="px-6 py-16 text-center">
                 <Spinner size="lg" />
@@ -198,7 +202,7 @@ export default function SalesPage() {
         </TableBody>
       </Table>
 
-      {enabled && !isLoading && data && data.pagination.total > 0 && (
+      {!isLoading && data && data.pagination.total > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
           <p className="text-sm text-slate-600 dark:text-slate-400">
             Showing {(data.pagination.page - 1) * PER_PAGE + 1}–

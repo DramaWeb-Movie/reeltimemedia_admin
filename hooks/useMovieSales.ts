@@ -3,26 +3,18 @@
 import { useState, useEffect, useCallback } from "react";
 import type { MovieSalesListResponse } from "@/types";
 
-export function useMovieSales(rangeStartIso: string, rangeEndIso: string, page: number, enabled: boolean) {
+export function useMovieSales(rangeStartIso: string | null, rangeEndIso: string | null, page: number) {
   const [data, setData] = useState<MovieSalesListResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!enabled) {
-      setIsLoading(false);
-      setData(null);
-      setFetchError(null);
-      return;
-    }
     setIsLoading(true);
     setFetchError(null);
     try {
-      const params = new URLSearchParams({
-        from: rangeStartIso,
-        to: rangeEndIso,
-        page: String(page),
-      });
+      const params = new URLSearchParams({ page: String(page) });
+      if (rangeStartIso) params.set("from", rangeStartIso);
+      if (rangeEndIso) params.set("to", rangeEndIso);
       const res = await fetch(`/api/sales/movies?${params}`);
       if (res.ok) {
         const json = (await res.json()) as MovieSalesListResponse;
@@ -38,7 +30,7 @@ export function useMovieSales(rangeStartIso: string, rangeEndIso: string, page: 
     } finally {
       setIsLoading(false);
     }
-  }, [rangeStartIso, rangeEndIso, page, enabled]);
+  }, [rangeStartIso, rangeEndIso, page]);
 
   useEffect(() => {
     load();

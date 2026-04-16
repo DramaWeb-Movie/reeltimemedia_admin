@@ -1,5 +1,5 @@
 import { PaymentCard } from "./PaymentCard";
-import { Spinner } from "@/components/ui/Spinner";
+import { PageLoadingState } from "@/components/ui/PageLoadingState";
 import type { Payment } from "@/types";
 
 interface PaymentListProps {
@@ -10,9 +10,11 @@ interface PaymentListProps {
 export function PaymentList({ payments, isLoading }: PaymentListProps) {
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <Spinner size="lg" />
-      </div>
+      <PageLoadingState
+        title="Loading payments"
+        description="Fetching the latest transaction records."
+        minHeightClass="min-h-[280px]"
+      />
     );
   }
 
