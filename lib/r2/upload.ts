@@ -15,6 +15,7 @@ import {
 } from "./mime";
 import { createLogger } from "@/lib/logger";
 import { movieStorageDir } from "@/lib/r2/storage-path";
+import type { ArtworkRole } from "@/lib/constants/movie-artwork";
 
 const log = createLogger("r2:upload");
 
@@ -169,6 +170,25 @@ export async function uploadVideo(movieId: string, title: string, file: File): P
   return uploadToR2(key, buffer, mime);
 }
 
+export async function uploadArtworkImage(
+  movieId: string,
+  title: string,
+  file: File,
+  role: ArtworkRole
+): Promise<string> {
+  const mime = file.type;
+  if (!ALLOWED_IMAGE_TYPES.includes(mime)) {
+    throw new Error(`Invalid image type. Allowed: ${ALLOWED_IMAGE_TYPES.join(", ")}`);
+  }
+  if (file.size > MAX_IMAGE_BYTES) {
+    throw new Error(`Image too large. Max ${MAX_IMAGE_BYTES / 1024 / 1024}MB`);
+  }
+  const ext = getExtension(mime, "jpg");
+  const key = `${movieStorageDir(title, movieId)}/${role}.${ext}`;
+  const buffer = Buffer.from(await file.arrayBuffer());
+  return uploadToR2(key, buffer, mime);
+}
+
 export async function uploadThumbnail(movieId: string, title: string, file: File): Promise<string> {
   const mime = file.type;
   if (!ALLOWED_IMAGE_TYPES.includes(mime)) {
@@ -179,6 +199,20 @@ export async function uploadThumbnail(movieId: string, title: string, file: File
   }
   const ext = getExtension(mime, "jpg");
   const key = `${movieStorageDir(title, movieId)}/thumbnail.${ext}`;
+  const buffer = Buffer.from(await file.arrayBuffer());
+  return uploadToR2(key, buffer, mime);
+}
+
+export async function uploadCover(movieId: string, title: string, file: File): Promise<string> {
+  const mime = file.type;
+  if (!ALLOWED_IMAGE_TYPES.includes(mime)) {
+    throw new Error(`Invalid image type. Allowed: ${ALLOWED_IMAGE_TYPES.join(", ")}`);
+  }
+  if (file.size > MAX_IMAGE_BYTES) {
+    throw new Error(`Cover image too large. Max ${MAX_IMAGE_BYTES / 1024 / 1024}MB`);
+  }
+  const ext = getExtension(mime, "jpg");
+  const key = `${movieStorageDir(title, movieId)}/cover.${ext}`;
   const buffer = Buffer.from(await file.arrayBuffer());
   return uploadToR2(key, buffer, mime);
 }

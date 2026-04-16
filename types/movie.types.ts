@@ -7,10 +7,13 @@ export interface Movie {
   title: string;
   title_kh: string | null;
   description: string | null;
+  /** Comma-separated canonical genre names (e.g. "Action, Drama") */
   genre: string | null;
   release_date: string | null;
   duration: number | null;
   thumbnail_url: string | null;
+  cover_url: string | null;
+  promotion_banner_url?: string | null;
   video_url: string | null;
   status: MovieStatus;
   type: MovieType;
@@ -46,7 +49,7 @@ export interface MovieFormData {
   title: string;
   title_kh: string;
   description: string;
-  genre: string;
+  genre: string[];
   release_date: string;
   duration: string;
   status: MovieStatus;

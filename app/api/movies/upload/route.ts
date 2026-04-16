@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { uploadVideo, uploadThumbnail } from "@/lib/r2/upload";
+import { uploadVideo, uploadArtworkImage } from "@/lib/r2/upload";
 import { requireAuth } from "@/lib/auth/requireAuth";
 import { notifyNewMovieChannels } from "@/lib/notifications/new-movie-channels";
 import { createLogger } from "@/lib/logger";
-import { validateTitle, validateVideoAndThumbnail } from "@/lib/validations";
+import { validateTitle, validateVideoAndFourArtwork } from "@/lib/validations";
 
 const log = createLogger("api:upload");
 
@@ -44,12 +44,21 @@ export async function POST(request: NextRequest) {
     const trailerUrl = (formData.get("trailerUrl") as string) || null;
 
     const videoFile = formData.get("video") as File | null;
-    const thumbnailFile = formData.get("thumbnail") as File | null;
+    const thumbnailPhoneFile = formData.get("thumbnailPhone") as File | null;
+    const thumbnailLaptopFile = formData.get("thumbnailLaptop") as File | null;
+    const coverPhoneFile = formData.get("coverPhone") as File | null;
+    const coverLaptopFile = formData.get("coverLaptop") as File | null;
 
     const titleError = validateTitle(title);
     if (titleError) return NextResponse.json({ error: titleError }, { status: 400 });
 
-    const mediaError = validateVideoAndThumbnail(videoFile, thumbnailFile);
+    const mediaError = validateVideoAndFourArtwork(
+      videoFile,
+      thumbnailPhoneFile,
+      thumbnailLaptopFile,
+      coverPhoneFile,
+      coverLaptopFile
+    );
     if (mediaError) return NextResponse.json({ error: mediaError }, { status: 400 });
 
     const supabase = createAdminClient();
@@ -68,6 +77,7 @@ export async function POST(request: NextRequest) {
         price,
         trailer_url: trailerUrl,
         thumbnail_url: null,
+        cover_url: null,
         video_url: null,
       })
       .select("id")
@@ -76,23 +86,38 @@ export async function POST(request: NextRequest) {
     if (insertError) {
       log.error("Supabase insert error", insertError);
       return NextResponse.json(
-        { error: insertError.message ?? "Failed to create movie record. Ensure the movies table exists in Supabase." },
+        {
+          error:
+            insertError.message ??
+            "Failed to create movie record. Ensure the movies table exists in Supabase.",
+        },
         { status: 500 }
       );
     }
 
     const movieId = movie.id;
+    const titleTrim = title.trim();
 
-    const [videoUrl, thumbnailUrl] = await Promise.all([
-      uploadVideo(movieId, title.trim(), videoFile!),
-      uploadThumbnail(movieId, title.trim(), thumbnailFile!),
+    const [
+      videoUrl,
+      thumbnailPhoneUrl,
+      thumbnailLaptopUrl,
+      coverPhoneUrl,
+      coverLaptopUrl,
+    ] = await Promise.all([
+      uploadVideo(movieId, titleTrim, videoFile!),
+      uploadArtworkImage(movieId, titleTrim, thumbnailPhoneFile!, "thumbnail-phone"),
+      uploadArtworkImage(movieId, titleTrim, thumbnailLaptopFile!, "thumbnail-laptop"),
+      uploadArtworkImage(movieId, titleTrim, coverPhoneFile!, "cover-phone"),
+      uploadArtworkImage(movieId, titleTrim, coverLaptopFile!, "cover-laptop"),
     ]);
 
     const { error: updateError } = await supabase
       .from("movies")
       .update({
         video_url: videoUrl,
-        thumbnail_url: thumbnailUrl,
+        thumbnail_url: thumbnailLaptopUrl,
+        cover_url: coverPhoneUrl,
         updated_at: new Date().toISOString(),
       })
       .eq("id", movieId);
@@ -107,22 +132,27 @@ export async function POST(request: NextRequest) {
 
     await notifyNewMovieChannels({
       movieId,
-      title: title.trim(),
+      title: titleTrim,
       type: "single",
       status,
     });
 
     return NextResponse.json({
       success: true,
-      movie: { id: movieId, video_url: videoUrl, thumbnail_url: thumbnailUrl },
+      movie: {
+        id: movieId,
+        video_url: videoUrl,
+        thumbnail_url: thumbnailLaptopUrl,
+        cover_url: coverPhoneUrl,
+      },
     });
   } catch (err) {
     log.error("Upload error", err);
-    
+
     // Provide more specific error messages
     let message = "Upload failed";
     let status = 500;
-    
+
     if (err instanceof Error) {
       if (err.message.includes("parse") && err.message.includes("FormData")) {
         message = "Failed to parse upload data. The file may be too large or the upload was interrupted.";
@@ -134,7 +164,7 @@ export async function POST(request: NextRequest) {
         message = err.message;
       }
     }
-    
+
     return NextResponse.json({ error: message }, { status });
   }
 }

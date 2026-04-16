@@ -63,7 +63,7 @@ export const UploadProgressModal = memo(function UploadProgressModal({
                     ? `Episode ${currentEpisodeIndex} of ${episodesLength}...`
                     : "Preparing..."
                   : uploadProgress < 95
-                    ? "Finalizing thumbnail..."
+                    ? "Finalizing images..."
                     : uploadProgress < 100
                       ? "Saving to database..."
                       : "Complete!"}

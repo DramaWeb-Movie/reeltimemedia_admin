@@ -3,7 +3,9 @@ import { CastInput } from "@/components/ui/CastInput";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
-import { GENRE_OPTIONS } from "@/lib/constants/genres";
+import { GenreMultiSelect } from "@/components/ui/GenreMultiSelect";
+import type { ArtworkRole } from "@/lib/constants/movie-artwork";
+import { ArtworkDropSlot } from "@/components/upload/ArtworkDropSlot";
 
 type SeriesStatus = "draft" | "published";
 
@@ -14,8 +16,8 @@ type StepDetailsCardProps = {
   onTitleKhChange: (value: string) => void;
   description: string;
   onDescriptionChange: (value: string) => void;
-  genre: string;
-  onGenreChange: (value: string) => void;
+  genres: string[];
+  onGenresChange: (value: string[]) => void;
   cast: string;
   onCastChange: (value: string) => void;
   releaseDate: string;
@@ -24,13 +26,10 @@ type StepDetailsCardProps = {
   onDurationChange: (value: string) => void;
   status: SeriesStatus;
   onStatusChange: (value: SeriesStatus) => void;
-  thumbnailFile: File | null;
-  isDraggingThumbnail: boolean;
-  thumbnailRef: React.RefObject<HTMLInputElement | null>;
-  onThumbnailDragOver: (e: React.DragEvent<HTMLDivElement>) => void;
-  onThumbnailDragLeave: () => void;
-  onThumbnailDrop: (e: React.DragEvent<HTMLDivElement>) => void;
-  onThumbnailFileChange: (file: File | null) => void;
+  trailerUrl: string;
+  onTrailerUrlChange: (value: string) => void;
+  artworkByRole: Record<ArtworkRole, File | null>;
+  onArtworkChange: (role: ArtworkRole, file: File | null) => void;
 };
 
 export const StepDetailsCard = memo(function StepDetailsCard({
@@ -40,8 +39,8 @@ export const StepDetailsCard = memo(function StepDetailsCard({
   onTitleKhChange,
   description,
   onDescriptionChange,
-  genre,
-  onGenreChange,
+  genres,
+  onGenresChange,
   cast,
   onCastChange,
   releaseDate,
@@ -50,50 +49,50 @@ export const StepDetailsCard = memo(function StepDetailsCard({
   onDurationChange,
   status,
   onStatusChange,
-  thumbnailFile,
-  isDraggingThumbnail,
-  thumbnailRef,
-  onThumbnailDragOver,
-  onThumbnailDragLeave,
-  onThumbnailDrop,
-  onThumbnailFileChange,
+  trailerUrl,
+  onTrailerUrlChange,
+  artworkByRole,
+  onArtworkChange,
 }: StepDetailsCardProps) {
   return (
     <Card>
       <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-4">Step 2: Series Details</h3>
       <div className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Input label="Title (English)" value={title} onChange={(e) => onTitleChange(e.target.value)} placeholder="Series title" required />
-          <Input label="Title (Khmer)" value={titleKh} onChange={(e) => onTitleKhChange(e.target.value)} placeholder="ឈ្មោះស៊េរី" />
+          <Input
+            label="Title (English)"
+            value={title}
+            onChange={(e) => onTitleChange(e.target.value)}
+            placeholder="Series title"
+            required
+          />
+          <Input
+            label="Title (Khmer)"
+            value={titleKh}
+            onChange={(e) => onTitleKhChange(e.target.value)}
+            placeholder="ឈ្មោះស៊េរី"
+          />
         </div>
         <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Cover image</label>
-          <div
-            onDragOver={onThumbnailDragOver}
-            onDragLeave={onThumbnailDragLeave}
-            onDrop={onThumbnailDrop}
-            onClick={() => thumbnailRef.current?.click()}
-            className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
-              thumbnailFile ? "border-emerald-500/50 bg-emerald-500/10" : isDraggingThumbnail ? "border-red-500 bg-red-500/10" : "border-slate-300 dark:border-slate-700 hover:border-slate-400"
-            }`}
-          >
-            <input
-              ref={thumbnailRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              className="hidden"
-              onChange={(e) => onThumbnailFileChange(e.target.files?.[0] ?? null)}
+          <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Artwork (two images)</p>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">
+            Upload one movie thumbnail and one movie cover.
+          </p>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <ArtworkDropSlot
+              role="thumbnail-laptop"
+              label="Movie thumbnail"
+              description="Main thumbnail image for this series."
+              file={artworkByRole["thumbnail-laptop"] ?? artworkByRole["thumbnail-phone"]}
+              onChange={(f) => onArtworkChange("thumbnail-laptop", f)}
             />
-            {thumbnailFile ? (
-              <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">{thumbnailFile.name}</p>
-            ) : (
-              <>
-                <svg className="w-10 h-10 mx-auto text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Drop cover image or click (JPG, PNG, WebP)</p>
-              </>
-            )}
+            <ArtworkDropSlot
+              role="cover-phone"
+              label="Movie cover"
+              description="Main cover image for this series."
+              file={artworkByRole["cover-phone"] ?? artworkByRole["cover-laptop"]}
+              onChange={(f) => onArtworkChange("cover-phone", f)}
+            />
           </div>
         </div>
         <div>
@@ -106,19 +105,44 @@ export const StepDetailsCard = memo(function StepDetailsCard({
             className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500 resize-none"
           />
         </div>
+        <GenreMultiSelect
+          value={genres}
+          onChange={onGenresChange}
+          hint="Pick from the list and/or add your own below."
+        />
+        <CastInput label="Cast" value={cast} onChange={onCastChange} placeholder="Actor name" />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Select label="Genre" options={GENRE_OPTIONS} value={genre} onChange={(e) => onGenreChange(e.target.value)} placeholder="Select genre" />
-          <CastInput label="Cast" value={cast} onChange={onCastChange} placeholder="Actor name" />
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Input label="Release Date" type="date" value={releaseDate} onChange={(e) => onReleaseDateChange(e.target.value)} />
-          <Input label="Duration (avg min/episode)" type="number" value={duration} onChange={(e) => onDurationChange(e.target.value)} placeholder="45" />
+          <Input
+            label="Release Year"
+            type="number"
+            min="1900"
+            max="2100"
+            step="1"
+            value={releaseDate}
+            onChange={(e) => onReleaseDateChange(e.target.value)}
+            placeholder="2024"
+          />
+          <Input
+            label="Duration (avg min/episode)"
+            type="number"
+            value={duration}
+            onChange={(e) => onDurationChange(e.target.value)}
+            placeholder="45"
+          />
         </div>
         <Select
           label="Status"
           options={[{ value: "draft", label: "Draft" }, { value: "published", label: "Published" }]}
           value={status}
           onChange={(e) => onStatusChange(e.target.value as SeriesStatus)}
+        />
+        <Input
+          label="Trailer URL"
+          type="url"
+          value={trailerUrl}
+          onChange={(e) => onTrailerUrlChange(e.target.value)}
+          placeholder="https://youtube.com/..."
+          hint="Optional — YouTube or direct video link"
         />
       </div>
     </Card>

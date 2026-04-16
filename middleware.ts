@@ -20,6 +20,8 @@ const SECURITY_HEADERS: Record<string, string> = {
     "form-action 'self'",
     "frame-ancestors 'none'",
     "object-src 'none'",
+    // default-src is 'self'; without frame-src, iframes inherit that and block YouTube embeds
+    "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://youtube.com",
     scriptSrc,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https:",

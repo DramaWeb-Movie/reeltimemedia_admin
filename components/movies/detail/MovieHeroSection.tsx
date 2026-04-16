@@ -2,8 +2,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import type { Movie } from "@/types";
+import { formatGenresDisplay } from "@/lib/genre-utils";
 import {
   ArrowLeft,
   CalendarDays,
@@ -22,13 +22,28 @@ const statusBadge: Record<Movie["status"], "default" | "success" | "warning" | "
 };
 
 function formatDate(value: string | null | undefined): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString();
+  if (!value) return "Not scheduled";
+  return new Date(value).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 function formatDuration(value: number | null | undefined): string {
-  if (value == null) return "—";
-  return `${value} min`;
+  if (value == null) return "Not set";
+  if (value < 60) return `${value} min`;
+  const hours = Math.floor(value / 60);
+  const mins = value % 60;
+  return mins === 0 ? `${hours}h` : `${hours}h ${mins}m`;
+}
+
+function formatEncodingStatus(status: Movie["encoding_status"]): string {
+  if (!status) return "Pending ingest";
+  return status
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 interface MovieHeroSectionProps {
@@ -41,25 +56,66 @@ interface MovieHeroSectionProps {
 
 export function MovieHeroSection({ movie, id, listHref, isDeleting, onDeleteClick }: MovieHeroSectionProps) {
   const isSeries = movie.type === "series";
+  const heroBannerUrl = movie.thumbnail_url ?? movie.cover_url;
+  const posterUrl = movie.cover_url ?? movie.thumbnail_url;
+  const genres = (formatGenresDisplay(movie.genre) || "")
+    .split(",")
+    .map((genre) => genre.trim())
+    .filter(Boolean);
+  const accessLabel = isSeries
+    ? `${movie.free_episodes_count ?? 0} free of ${movie.total_episodes ?? 0} episodes`
+    : movie.price != null
+      ? `$${movie.price.toFixed(2)} one-time purchase`
+      : "Pricing still needs to be set";
 
   return (
-    <section className="relative overflow-hidden rounded-3xl border border-slate-200/80 dark:border-slate-700/80 bg-linear-to-br from-white via-slate-50 to-slate-100 dark:from-slate-900/80 dark:via-slate-900/50 dark:to-slate-800/50 p-6 md:p-8">
-      <div className="absolute -top-14 -right-14 h-44 w-44 rounded-full bg-red-500/10 blur-3xl" />
-      <div className="absolute -bottom-20 -left-16 h-56 w-56 rounded-full bg-blue-500/10 blur-3xl" />
+    <section className="relative isolate overflow-hidden rounded-[32px] border border-slate-200/80 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.55)] dark:border-slate-700/80">
+      {heroBannerUrl ? (
+        <div className="absolute inset-0">
+          <Image
+            src={heroBannerUrl}
+            alt=""
+            fill
+            unoptimized
+            priority
+            sizes="100vw"
+            className="object-cover opacity-30"
+          />
+          <div className="absolute inset-0 bg-linear-to-br from-slate-950/92 via-slate-950/86 to-slate-900/78" />
+        </div>
+      ) : (
+        <div className="absolute inset-0 bg-linear-to-br from-slate-950 via-slate-900 to-slate-800" />
+      )}
 
-      <div className="relative space-y-6">
+      <div className="absolute -top-20 right-0 h-72 w-72 rounded-full bg-red-500/18 blur-3xl" />
+      <div className="absolute -bottom-24 left-0 h-80 w-80 rounded-full bg-cyan-500/14 blur-3xl" />
+      <div className="absolute inset-x-0 top-0 h-44 bg-linear-to-b from-white/10 to-transparent" />
+
+      <div className="relative px-5 py-6 md:px-8 md:py-8 lg:px-10 lg:py-10">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <Link
             href={listHref}
-            className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors"
+            className="inline-flex items-center gap-2 text-sm text-white/70 transition-colors hover:text-white"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to list
           </Link>
 
           <div className="flex flex-wrap gap-2">
+            <Link href={`/movies/${id}/promotion`}>
+              <Button
+                variant="outline"
+                className="border-white/20 bg-white/10 text-white hover:border-white/30 hover:bg-white/15 hover:text-white dark:border-white/20 dark:text-white dark:hover:bg-white/15"
+              >
+                Promotion Banner
+              </Button>
+            </Link>
             <Link href={`/movies/${id}/edit`}>
-              <Button variant="outline" leftIcon={<Pencil className="h-4 w-4" />}>
+              <Button
+                variant="outline"
+                className="border-white/20 bg-white/10 text-white hover:border-white/30 hover:bg-white/15 hover:text-white dark:border-white/20 dark:text-white dark:hover:bg-white/15"
+                leftIcon={<Pencil className="h-4 w-4" />}
+              >
                 Edit
               </Button>
             </Link>
@@ -74,79 +130,140 @@ export function MovieHeroSection({ movie, id, listHref, isDeleting, onDeleteClic
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
-          <div className="w-full max-w-55 mx-auto lg:mx-0">
-            <div className="aspect-2/3 rounded-2xl overflow-hidden ring-1 ring-slate-200/60 dark:ring-slate-700/70 shadow-lg bg-slate-200 dark:bg-slate-800">
-              {movie.thumbnail_url ? (
-                <Image src={movie.thumbnail_url} alt={movie.title} width={220} height={330} unoptimized className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-slate-400 dark:text-slate-500">
-                  <Film className="w-16 h-16" />
+        <div className="mt-8 grid gap-8 lg:grid-cols-[240px_minmax(0,1fr)] lg:items-end">
+          <div className="mx-auto w-full max-w-60 lg:mx-0">
+            <div className="overflow-hidden rounded-[28px] border border-white/15 bg-white/10 shadow-2xl shadow-slate-950/30 backdrop-blur">
+              <div className="aspect-[2/3] overflow-hidden bg-slate-800/70">
+                {posterUrl ? (
+                  <Image
+                    src={posterUrl}
+                    alt={movie.title}
+                    width={240}
+                    height={360}
+                    unoptimized
+                    priority={!heroBannerUrl}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-white/40">
+                    <Film className="w-16 h-16" />
+                  </div>
+                )}
+              </div>
+              <div className="space-y-3 border-t border-white/10 px-4 py-4 text-white">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs uppercase tracking-[0.24em] text-white/55">Library status</span>
+                  <Badge variant={statusBadge[movie.status]}>{movie.status}</Badge>
                 </div>
-              )}
+                <p className="text-sm text-white/78">
+                  {movie.updated_at
+                    ? `Updated ${formatDate(movie.updated_at)}`
+                    : "Freshly added to the catalog"}
+                </p>
+              </div>
             </div>
           </div>
 
-          <div className="min-w-0 space-y-5">
+          <div className="min-w-0 space-y-6 text-white">
             <div>
-              <div className="flex flex-wrap items-center gap-2 mb-3">
-                <Badge variant={isSeries ? "info" : "default"}>
+              <div className="mb-4 flex flex-wrap items-center gap-2">
+                <Badge className="border-white/12 bg-white/10 text-white" variant={isSeries ? "info" : "default"}>
                   {isSeries ? "Series" : "Single Movie"}
                 </Badge>
                 <Badge variant={statusBadge[movie.status]}>{movie.status}</Badge>
-                {movie.title_kh ? <Badge variant="neutral">Khmer title available</Badge> : null}
+                <Badge className="border-white/12 bg-white/10 text-white" variant="neutral">
+                  {formatEncodingStatus(movie.encoding_status)}
+                </Badge>
+                {movie.title_kh ? (
+                  <Badge className="border-white/12 bg-white/10 text-white" variant="neutral">
+                    Khmer title available
+                  </Badge>
+                ) : null}
               </div>
 
-              <h1 className="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white tracking-tight leading-tight">
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/55">Movie Overview</p>
+              <h1 className="mt-3 text-3xl font-bold tracking-tight text-white md:text-5xl">
                 {movie.title}
               </h1>
               {movie.title_kh ? (
-                <p className="mt-1 text-slate-600 dark:text-slate-400">{movie.title_kh}</p>
+                <p className="mt-2 text-base text-white/70 md:text-lg">{movie.title_kh}</p>
               ) : null}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-              <Card padding="sm" className="rounded-xl!">
-                <p className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">Genre</p>
-                <p className="mt-1 font-semibold text-slate-900 dark:text-white">{movie.genre ?? "—"}</p>
-              </Card>
-              <Card padding="sm" className="rounded-xl!">
-                <p className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">Release</p>
-                <p className="mt-1 font-semibold text-slate-900 dark:text-white inline-flex items-center gap-1.5">
-                  <CalendarDays className="h-4 w-4 text-slate-500" />
+            <p className="max-w-4xl text-sm leading-7 text-white/78 md:text-base">
+              {movie.description ||
+                "Add a synopsis to help your team quickly understand what this title is about before publishing or promoting it."}
+            </p>
+
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-2xl border border-white/12 bg-white/10 p-4 backdrop-blur">
+                <p className="text-xs uppercase tracking-[0.22em] text-white/55">Release</p>
+                <p className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-white">
+                  <CalendarDays className="h-4 w-4 text-white/65" />
                   {formatDate(movie.release_date)}
                 </p>
-              </Card>
-              <Card padding="sm" className="rounded-xl!">
-                <p className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">Duration</p>
-                <p className="mt-1 font-semibold text-slate-900 dark:text-white inline-flex items-center gap-1.5">
-                  <Clock3 className="h-4 w-4 text-slate-500" />
+              </div>
+              <div className="rounded-2xl border border-white/12 bg-white/10 p-4 backdrop-blur">
+                <p className="text-xs uppercase tracking-[0.22em] text-white/55">Duration</p>
+                <p className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-white">
+                  <Clock3 className="h-4 w-4 text-white/65" />
                   {formatDuration(movie.duration)}
                 </p>
-              </Card>
-              <Card padding="sm" className="rounded-xl!">
-                <p className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              </div>
+              <div className="rounded-2xl border border-white/12 bg-white/10 p-4 backdrop-blur">
+                <p className="text-xs uppercase tracking-[0.22em] text-white/55">
                   {isSeries ? "Access" : "Price"}
                 </p>
                 {isSeries ? (
-                  <p className="mt-1 font-semibold text-slate-900 dark:text-white inline-flex items-center gap-1.5">
-                    <Tv className="h-4 w-4 text-slate-500" />
-                    {movie.free_episodes_count ?? 0} free · {movie.total_episodes ?? "—"} eps
+                  <p className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-white">
+                    <Tv className="h-4 w-4 text-white/65" />
+                    {accessLabel}
                   </p>
                 ) : (
-                  <p className="mt-1 font-semibold text-emerald-600 dark:text-emerald-400 inline-flex items-center gap-1.5">
-                    <Clapperboard className="h-4 w-4" />
-                    ${movie.price?.toFixed(2) ?? "—"}
+                  <p className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-white">
+                    <Clapperboard className="h-4 w-4 text-white/65" />
+                    {accessLabel}
                   </p>
                 )}
-              </Card>
+              </div>
+              <div className="rounded-2xl border border-white/12 bg-white/10 p-4 backdrop-blur">
+                <p className="text-xs uppercase tracking-[0.22em] text-white/55">Encoding</p>
+                <p className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-white">
+                  <Film className="h-4 w-4 text-white/65" />
+                  {formatEncodingStatus(movie.encoding_status)}
+                </p>
+              </div>
             </div>
 
-            {movie.description ? (
-              <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300 line-clamp-3">
-                {movie.description}
-              </p>
-            ) : null}
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+              <div className="rounded-2xl border border-white/12 bg-white/8 p-4 backdrop-blur">
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/55">Genres</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {genres.length > 0 ? (
+                    genres.map((genre) => (
+                      <span
+                        key={genre}
+                        className="inline-flex items-center rounded-full border border-white/12 bg-white/10 px-3 py-1 text-xs font-medium text-white/90"
+                      >
+                        {genre}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-sm text-white/70">Add genres to improve discovery and internal sorting.</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/12 bg-white/8 p-4 backdrop-blur">
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/55">Cast & activity</p>
+                <p className="mt-3 text-sm leading-6 text-white/80">
+                  {movie.cast || "No cast listed yet. Adding cast helps editors and marketers recognize the title faster."}
+                </p>
+                <p className="mt-4 text-xs text-white/55">
+                  Created {formatDate(movie.created_at)} · Last updated {formatDate(movie.updated_at)}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </div>

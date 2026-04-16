@@ -19,6 +19,8 @@ function mapSupabaseRow(row: Record<string, unknown>): Movie {
     release_date: row.release_date ? String(row.release_date).slice(0, 10) : null,
     duration: row.duration != null ? Number(row.duration) : null,
     thumbnail_url: (row.thumbnail_url as string) ?? null,
+    cover_url: (row.cover_url as string) ?? null,
+    promotion_banner_url: (row.promotion_banner_url as string) ?? null,
     video_url: (row.video_url as string) ?? null,
     status: (row.status as Movie["status"]) ?? "draft",
     type: (row.type as Movie["type"]) ?? "single",
@@ -55,12 +57,21 @@ function collectMovieOwnedObjectKeys(
 async function collectMovieRelatedR2Keys(
   movieId: string,
   publicUrl: string,
-  movie: Pick<Movie, "video_url" | "thumbnail_url" | "hls_manifest_url">,
+  movie: Pick<
+    Movie,
+    | "video_url"
+    | "thumbnail_url"
+    | "cover_url"
+    | "promotion_banner_url"
+    | "hls_manifest_url"
+  >,
   episodes: EpisodeMediaRow[]
 ): Promise<string[]> {
   const directKeys = collectMovieOwnedObjectKeys(movieId, publicUrl, [
     movie.video_url,
     movie.thumbnail_url,
+    movie.cover_url,
+    movie.promotion_banner_url,
     movie.hls_manifest_url,
     ...episodes.flatMap((ep) => [ep.video_url, ep.hls_manifest_url]),
   ]);
@@ -156,6 +167,8 @@ export async function PATCH(
       total_episodes: "total_episodes",
       subscription_plan_id: "subscription_plan_id",
       thumbnail_url: "thumbnail_url",
+      cover_url: "cover_url",
+      promotion_banner_url: "promotion_banner_url",
       video_url: "video_url",
     };
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -207,7 +220,9 @@ export async function DELETE(
     const supabase = createAdminClient();
     const { data: movieRow, error: movieError } = await supabase
       .from("movies")
-      .select("id, video_url, thumbnail_url, hls_manifest_url")
+      .select(
+        "id, video_url, thumbnail_url, cover_url, promotion_banner_url, hls_manifest_url"
+      )
       .eq("id", id)
       .single();
 
@@ -226,7 +241,14 @@ export async function DELETE(
       r2KeysToDelete = await collectMovieRelatedR2Keys(
         id,
         publicUrl,
-        movieRow as Pick<Movie, "video_url" | "thumbnail_url" | "hls_manifest_url">,
+        movieRow as Pick<
+          Movie,
+          | "video_url"
+          | "thumbnail_url"
+          | "cover_url"
+          | "promotion_banner_url"
+          | "hls_manifest_url"
+        >,
         (episodeRows ?? []) as EpisodeMediaRow[]
       );
     } catch (err) {

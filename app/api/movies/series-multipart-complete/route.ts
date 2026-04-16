@@ -39,22 +39,48 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { movieId, thumbnailKey, finalStatus = "draft", episodes } = body as {
+    const {
+      movieId,
+      thumbnailPhoneKey,
+      thumbnailLaptopKey,
+      coverPhoneKey,
+      coverLaptopKey,
+      finalStatus = "draft",
+      episodes,
+    } = body as {
       movieId: string;
-      thumbnailKey: string;
+      thumbnailPhoneKey: string;
+      thumbnailLaptopKey: string;
+      coverPhoneKey: string;
+      coverLaptopKey: string;
       finalStatus?: string;
       episodes: CompletedEpisode[];
     };
 
-    if (!movieId || !thumbnailKey || !Array.isArray(episodes) || episodes.length === 0) {
+    if (
+      !movieId ||
+      !thumbnailPhoneKey ||
+      !thumbnailLaptopKey ||
+      !coverPhoneKey ||
+      !coverLaptopKey ||
+      !Array.isArray(episodes) ||
+      episodes.length === 0
+    ) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
     const statusError = validateFinalStatus(finalStatus);
     if (statusError) return NextResponse.json({ error: statusError }, { status: 400 });
 
-    const thumbKeyError = validateKeyBelongsToMovie(thumbnailKey, movieId);
-    if (thumbKeyError) return NextResponse.json({ error: "Invalid thumbnail key" }, { status: 400 });
+    for (const [label, k] of [
+      ["thumbnail phone", thumbnailPhoneKey],
+      ["thumbnail laptop", thumbnailLaptopKey],
+      ["cover phone", coverPhoneKey],
+      ["cover laptop", coverLaptopKey],
+    ] as const) {
+      const e = validateKeyBelongsToMovie(k, movieId);
+      if (e) return NextResponse.json({ error: `Invalid ${label} key` }, { status: 400 });
+    }
 
     for (const ep of episodes) {
       const epKeyError = validateKeyBelongsToMovie(ep.key, movieId);
@@ -71,8 +97,10 @@ export async function POST(request: NextRequest) {
       episodes.map((ep) => completeMultipartUpload(ep.key, ep.uploadId, ep.parts))
     );
 
-    // Construct URLs server-side
-    const thumbnailUrl = buildPublicUrl(thumbnailKey);
+    const thumbnailPhoneUrl = buildPublicUrl(thumbnailPhoneKey);
+    const thumbnailLaptopUrl = buildPublicUrl(thumbnailLaptopKey);
+    const coverPhoneUrl = buildPublicUrl(coverPhoneKey);
+    const coverLaptopUrl = buildPublicUrl(coverLaptopKey);
 
     const supabase = createAdminClient();
 
@@ -95,11 +123,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Promote series to final status and save thumbnail URL
+    // Promote series to final status and save image URLs
     const { error: updateError } = await supabase
       .from("movies")
       .update({
-        thumbnail_url: thumbnailUrl,
+        thumbnail_url: thumbnailLaptopUrl,
+        cover_url: coverPhoneUrl,
         status: finalStatus,
         updated_at: new Date().toISOString(),
       })
@@ -173,7 +202,14 @@ export async function POST(request: NextRequest) {
 
     log.info("Series upload finalized", { movieId, episodes: episodes.length, status: finalStatus });
 
-    return NextResponse.json({ success: true, movie: { id: movieId, thumbnail_url: thumbnailUrl } });
+    return NextResponse.json({
+      success: true,
+      movie: {
+        id: movieId,
+        thumbnail_url: thumbnailLaptopUrl,
+        cover_url: coverPhoneUrl,
+      },
+    });
   } catch (err) {
     log.error("Series multipart complete error", err);
     const message = err instanceof Error ? err.message : "Failed to complete upload";

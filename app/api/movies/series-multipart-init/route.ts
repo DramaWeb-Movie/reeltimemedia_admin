@@ -43,9 +43,16 @@ export async function POST(request: NextRequest) {
     cast,
     releaseDate,
     duration,
+    trailerUrl,
     finalStatus = "draft",
-    thumbnailType,
-    thumbnailSize,
+    thumbnailPhoneType,
+    thumbnailPhoneSize,
+    thumbnailLaptopType,
+    thumbnailLaptopSize,
+    coverPhoneType,
+    coverPhoneSize,
+    coverLaptopType,
+    coverLaptopSize,
     freeEpisodesCount,
     totalEpisodes,
     episodes,
@@ -57,9 +64,16 @@ export async function POST(request: NextRequest) {
     cast?: string;
     releaseDate?: string;
     duration?: number | null;
+    trailerUrl?: string | null;
     finalStatus?: string;
-    thumbnailType: string;
-    thumbnailSize?: number;
+    thumbnailPhoneType: string;
+    thumbnailPhoneSize?: number;
+    thumbnailLaptopType: string;
+    thumbnailLaptopSize?: number;
+    coverPhoneType: string;
+    coverPhoneSize?: number;
+    coverLaptopType: string;
+    coverLaptopSize?: number;
     freeEpisodesCount?: number;
     totalEpisodes?: number;
     episodes: EpisodeInput[];
@@ -69,17 +83,31 @@ export async function POST(request: NextRequest) {
   if (!title?.trim()) {
     return NextResponse.json({ error: "Title is required" }, { status: 400 });
   }
-  if (!thumbnailType || !ALLOWED_IMAGE_TYPES.includes(thumbnailType)) {
-    return NextResponse.json(
-      { error: `Invalid thumbnail type. Allowed: ${ALLOWED_IMAGE_TYPES.join(", ")}` },
-      { status: 400 }
-    );
+  for (const [label, t] of [
+    ["Thumbnail (phone)", thumbnailPhoneType],
+    ["Thumbnail (laptop)", thumbnailLaptopType],
+    ["Cover (phone)", coverPhoneType],
+    ["Cover (laptop)", coverLaptopType],
+  ] as const) {
+    if (!t || !ALLOWED_IMAGE_TYPES.includes(t)) {
+      return NextResponse.json(
+        { error: `${label}: invalid type. Allowed: ${ALLOWED_IMAGE_TYPES.join(", ")}` },
+        { status: 400 }
+      );
+    }
   }
-  if (thumbnailSize && Number(thumbnailSize) > MAX_IMAGE_BYTES) {
-    return NextResponse.json(
-      { error: `Thumbnail too large. Maximum is ${MAX_IMAGE_BYTES / 1024 / 1024}MB` },
-      { status: 400 }
-    );
+  for (const [label, sz] of [
+    ["Thumbnail (phone)", thumbnailPhoneSize],
+    ["Thumbnail (laptop)", thumbnailLaptopSize],
+    ["Cover (phone)", coverPhoneSize],
+    ["Cover (laptop)", coverLaptopSize],
+  ] as const) {
+    if (sz && Number(sz) > MAX_IMAGE_BYTES) {
+      return NextResponse.json(
+        { error: `${label} too large. Maximum is ${MAX_IMAGE_BYTES / 1024 / 1024}MB` },
+        { status: 400 }
+      );
+    }
   }
   if (!Array.isArray(episodes) || episodes.length === 0) {
     return NextResponse.json({ error: "At least one episode is required" }, { status: 400 });
@@ -128,8 +156,10 @@ export async function POST(request: NextRequest) {
       total_episodes: totalEpisodes ?? episodes.length,
       subscription_plan_id: null,
       thumbnail_url: null,
+      cover_url: null,
       video_url: null,
-      trailer_url: null,
+      trailer_url:
+        typeof trailerUrl === "string" && trailerUrl.trim() ? trailerUrl.trim() : null,
     })
     .select("id")
     .single();
@@ -149,11 +179,17 @@ export async function POST(request: NextRequest) {
   const createdMultiparts: Array<{ uploadId: string; key: string }> = [];
 
   try {
-    // Thumbnail presigned URL
-    const thumbnailExt = getExtension(thumbnailType, "jpg");
     const base = movieStorageDir(seriesTitle, movieId);
-    const thumbnailKey = `${base}/thumbnail.${thumbnailExt}`;
-    const thumbnail = await generatePresignedUploadUrl(thumbnailKey, thumbnailType);
+    const tpExt = getExtension(thumbnailPhoneType, "jpg");
+    const tlExt = getExtension(thumbnailLaptopType, "jpg");
+    const cpExt = getExtension(coverPhoneType, "jpg");
+    const clExt = getExtension(coverLaptopType, "jpg");
+    const [thumbnailPhone, thumbnailLaptop, coverPhone, coverLaptop] = await Promise.all([
+      generatePresignedUploadUrl(`${base}/thumbnail-phone.${tpExt}`, thumbnailPhoneType),
+      generatePresignedUploadUrl(`${base}/thumbnail-laptop.${tlExt}`, thumbnailLaptopType),
+      generatePresignedUploadUrl(`${base}/cover-phone.${cpExt}`, coverPhoneType),
+      generatePresignedUploadUrl(`${base}/cover-laptop.${clExt}`, coverLaptopType),
+    ]);
 
     // One multipart upload per episode
     const episodeUploads = await Promise.all(
@@ -186,7 +222,10 @@ export async function POST(request: NextRequest) {
       success: true,
       movieId,
       finalStatus,
-      thumbnail: { uploadUrl: thumbnail.uploadUrl, key: thumbnail.key },
+      thumbnailPhone: { uploadUrl: thumbnailPhone.uploadUrl, key: thumbnailPhone.key },
+      thumbnailLaptop: { uploadUrl: thumbnailLaptop.uploadUrl, key: thumbnailLaptop.key },
+      coverPhone: { uploadUrl: coverPhone.uploadUrl, key: coverPhone.key },
+      coverLaptop: { uploadUrl: coverLaptop.uploadUrl, key: coverLaptop.key },
       episodes: episodeUploads,
     });
   } catch (err) {

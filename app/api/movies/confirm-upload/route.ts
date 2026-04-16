@@ -17,6 +17,7 @@ export const runtime = "nodejs";
  *   movieId: string;
  *   videoUrl: string;
  *   thumbnailUrl: string;
+ *   coverUrl?: string;
  * }
  */
 export async function POST(request: NextRequest) {
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    const { movieId, videoUrl, thumbnailUrl } = body;
+    const { movieId, videoUrl, thumbnailUrl, coverUrl } = body;
 
     const idError = validateMovieId(movieId);
     if (idError) return NextResponse.json({ error: idError }, { status: 400 });
@@ -55,13 +56,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Update movie with file URLs
+    const updatePayload: Record<string, unknown> = {
+      video_url: videoUrl,
+      thumbnail_url: thumbnailUrl,
+      updated_at: new Date().toISOString(),
+    };
+    if (typeof coverUrl === "string" && coverUrl.trim()) {
+      updatePayload.cover_url = coverUrl.trim();
+    }
+
     const { error: updateError } = await supabase
       .from("movies")
-      .update({
-        video_url: videoUrl,
-        thumbnail_url: thumbnailUrl,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq("id", movieId);
 
     if (updateError) {
@@ -85,6 +91,7 @@ export async function POST(request: NextRequest) {
         id: movieId,
         video_url: videoUrl,
         thumbnail_url: thumbnailUrl,
+        ...(typeof coverUrl === "string" && coverUrl.trim() ? { cover_url: coverUrl.trim() } : {}),
       },
     });
   } catch (err) {

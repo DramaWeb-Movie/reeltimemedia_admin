@@ -14,6 +14,9 @@ import {
 } from "@/lib/upload/parallel-uploader";
 import { createLogger } from "@/lib/logger";
 import { MAX_VIDEO_BYTES, MAX_IMAGE_BYTES } from "@/lib/r2/mime";
+import { serializeGenresToDb } from "@/lib/genre-utils";
+import type { ArtworkRole } from "@/lib/constants/movie-artwork";
+import { ARTWORK_ROLES_ORDER } from "@/lib/constants/movie-artwork";
 import type { EpisodeInput } from "@/types";
 import { EpisodeRow } from "./components/EpisodeRow";
 import { StepAccessCard } from "./components/StepAccessCard";
@@ -28,6 +31,22 @@ type SeriesAccess = "membership" | "free";
 type SeriesStatus = "draft" | "published";
 
 const PROGRESS_UPDATE_INTERVAL_MS = 120;
+
+function releaseYearToDate(value: string): string | null {
+  const year = value.trim();
+  if (!year) return null;
+  if (!/^\d{4}$/.test(year)) return null;
+  return `${year}-01-01`;
+}
+
+function emptyArtwork(): Record<ArtworkRole, File | null> {
+  return {
+    "thumbnail-phone": null,
+    "thumbnail-laptop": null,
+    "cover-phone": null,
+    "cover-laptop": null,
+  };
+}
 
 function getAdaptiveUploadConcurrency(): number {
   if (typeof navigator === "undefined") return 8;
@@ -69,26 +88,43 @@ export default function SeriesUploadPage() {
   const [title, setTitle] = useState("");
   const [titleKh, setTitleKh] = useState("");
   const [description, setDescription] = useState("");
-  const [genre, setGenre] = useState("");
+  const [genres, setGenres] = useState<string[]>([]);
   const [releaseDate, setReleaseDate] = useState("");
   const [duration, setDuration] = useState("");
   const [status, setStatus] = useState<SeriesStatus>("draft");
   const [cast, setCast] = useState("");
-  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
-  const [isDraggingThumbnail, setIsDraggingThumbnail] = useState(false);
-  const thumbnailRef = useRef<HTMLInputElement>(null);
-  const thumbnailPreviewUrl = useMemo(
-    () => (thumbnailFile ? URL.createObjectURL(thumbnailFile) : null),
-    [thumbnailFile]
-  );
+  const [trailerUrl, setTrailerUrl] = useState("");
+  const [artworkByRole, setArtworkByRole] = useState<Record<ArtworkRole, File | null>>(emptyArtwork);
+  const thumbnailArtworkFile = artworkByRole["thumbnail-laptop"] ?? artworkByRole["thumbnail-phone"];
+  const coverArtworkFile = artworkByRole["cover-phone"] ?? artworkByRole["cover-laptop"];
+
+  const artworkPreviewUrls = useMemo(() => {
+    const next: Record<ArtworkRole, string | null> = {
+      "thumbnail-phone": null,
+      "thumbnail-laptop": null,
+      "cover-phone": null,
+      "cover-laptop": null,
+    };
+    for (const role of ARTWORK_ROLES_ORDER) {
+      const f = artworkByRole[role];
+      if (f) next[role] = URL.createObjectURL(f);
+    }
+    return next;
+  }, [
+    artworkByRole["thumbnail-phone"],
+    artworkByRole["thumbnail-laptop"],
+    artworkByRole["cover-phone"],
+    artworkByRole["cover-laptop"],
+  ]);
 
   useEffect(() => {
     return () => {
-      if (thumbnailPreviewUrl) {
-        URL.revokeObjectURL(thumbnailPreviewUrl);
+      for (const role of ARTWORK_ROLES_ORDER) {
+        const u = artworkPreviewUrls[role];
+        if (u) URL.revokeObjectURL(u);
       }
     };
-  }, [thumbnailPreviewUrl]);
+  }, [artworkPreviewUrls]);
 
   // Step 3: Episodes
   const [episodes, setEpisodes] = useState<EpisodeInput[]>([]);
@@ -124,29 +160,27 @@ export default function SeriesUploadPage() {
     updateEpisode(id, { videoFile: file });
   }, [updateEpisode]);
 
-  const handleThumbnailDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsDraggingThumbnail((prev) => (prev ? prev : true));
-  }, []);
-
-  const handleThumbnailDragLeave = useCallback(() => {
-    setIsDraggingThumbnail((prev) => (prev ? false : prev));
-  }, []);
-
-  const handleThumbnailDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsDraggingThumbnail(false);
-    const f = e.dataTransfer.files[0];
-    if (f?.type.startsWith("image/")) setThumbnailFile(f);
-  }, []);
-
-  const handleThumbnailFileChange = useCallback((file: File | null) => {
-    setThumbnailFile(file);
+  const handleArtworkChange = useCallback((role: ArtworkRole, file: File | null) => {
+    if (role.startsWith("thumbnail")) {
+      setArtworkByRole((prev) => ({
+        ...prev,
+        "thumbnail-phone": file,
+        "thumbnail-laptop": file,
+      }));
+      return;
+    }
+    setArtworkByRole((prev) => ({
+      ...prev,
+      "cover-phone": file,
+      "cover-laptop": file,
+    }));
   }, []);
 
   const canProceed = () => {
     if (step === 1) return true;
-    if (step === 2) return !!title.trim() && !!thumbnailFile;
+    if (step === 2) {
+      return !!title.trim() && !!thumbnailArtworkFile && !!coverArtworkFile;
+    }
     if (step === 3) return episodes.length > 0;
     return true;
   };
@@ -169,13 +203,15 @@ export default function SeriesUploadPage() {
       handleNext();
       return;
     }
-    if (!thumbnailFile) {
-      toastError("Cover image is required.");
+    if (!thumbnailArtworkFile || !coverArtworkFile) {
+      toastError("Thumbnail and movie cover are required.");
       return;
     }
-    if (thumbnailFile.size > MAX_IMAGE_BYTES) {
-      toastError(`Thumbnail is too large. Maximum is ${MAX_IMAGE_BYTES / 1024 / 1024}MB`);
-      return;
+    for (const file of [thumbnailArtworkFile, coverArtworkFile]) {
+      if (file.size > MAX_IMAGE_BYTES) {
+        toastError(`Each image must be at most ${MAX_IMAGE_BYTES / 1024 / 1024}MB`);
+        return;
+      }
     }
 
     let missingVideoEpisodeNumber: number | null = null;
@@ -240,13 +276,20 @@ export default function SeriesUploadPage() {
           title: title.trim(),
           title_kh: titleKh.trim() || null,
           description,
-          genre,
+          genre: serializeGenresToDb(genres),
           cast,
-          releaseDate,
+          releaseDate: releaseYearToDate(releaseDate),
           duration: duration ? parseInt(duration, 10) : null,
+          trailerUrl: trailerUrl.trim() || null,
           finalStatus: status,
-          thumbnailType: thumbnailFile.type,
-          thumbnailSize: thumbnailFile.size,
+          thumbnailPhoneType: thumbnailArtworkFile.type,
+          thumbnailPhoneSize: thumbnailArtworkFile.size,
+          thumbnailLaptopType: thumbnailArtworkFile.type,
+          thumbnailLaptopSize: thumbnailArtworkFile.size,
+          coverPhoneType: coverArtworkFile.type,
+          coverPhoneSize: coverArtworkFile.size,
+          coverLaptopType: coverArtworkFile.type,
+          coverLaptopSize: coverArtworkFile.size,
           freeEpisodesCount,
           totalEpisodes: episodes.length,
           episodes: episodes.map((ep) => ({
@@ -265,7 +308,15 @@ export default function SeriesUploadPage() {
         throw new Error(initData.error ?? "Failed to initialize upload");
       }
 
-      const { movieId, thumbnail, episodes: episodeInits, finalStatus: confirmedStatus } = initData;
+      const {
+        movieId,
+        thumbnailPhone,
+        thumbnailLaptop,
+        coverPhone,
+        coverLaptop,
+        episodes: episodeInits,
+        finalStatus: confirmedStatus,
+      } = initData;
       log.info("Series upload initialized", { movieId });
 
       // Store for cleanup on failure
@@ -279,13 +330,15 @@ export default function SeriesUploadPage() {
         ),
       };
 
-      // ── Step 2a: Start thumbnail upload immediately (runs in parallel) ─────
-      const thumbnailPromise = fetch(thumbnail.uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": thumbnailFile.type },
-        signal: abortSignal,
-        body: thumbnailFile,
-      });
+      const putArt = (url: string, f: File) =>
+        fetch(url, { method: "PUT", headers: { "Content-Type": f.type }, signal: abortSignal, body: f });
+
+      const imagePromises = Promise.all([
+        putArt(thumbnailPhone.uploadUrl, thumbnailArtworkFile),
+        putArt(thumbnailLaptop.uploadUrl, thumbnailArtworkFile),
+        putArt(coverPhone.uploadUrl, coverArtworkFile),
+        putArt(coverLaptop.uploadUrl, coverArtworkFile),
+      ]);
 
       // ── Step 2b: Upload each episode sequentially (parallel chunks within) ─
       const totalVideoBytes = episodes.reduce(
@@ -358,9 +411,10 @@ export default function SeriesUploadPage() {
 
       setUploadProgress(92);
 
-      // ── Step 3: Await thumbnail ────────────────────────────────────────────
-      const thumbRes = await thumbnailPromise;
-      if (!thumbRes.ok) throw new Error("Thumbnail upload failed");
+      const imageResponses = await imagePromises;
+      if (imageResponses.some((r) => !r.ok)) {
+        throw new Error("One or more artwork uploads failed");
+      }
       setUploadProgress(95);
 
       // ── Step 4: Complete all multipart uploads and save to DB ─────────────
@@ -371,7 +425,10 @@ export default function SeriesUploadPage() {
         signal: abortSignal,
         body: JSON.stringify({
           movieId,
-          thumbnailKey: thumbnail.key,
+          thumbnailPhoneKey: thumbnailPhone.key,
+          thumbnailLaptopKey: thumbnailLaptop.key,
+          coverPhoneKey: coverPhone.key,
+          coverLaptopKey: coverLaptop.key,
           finalStatus: confirmedStatus,
           episodes: completedEpisodes,
         }),
@@ -449,8 +506,8 @@ export default function SeriesUploadPage() {
             onTitleKhChange={setTitleKh}
             description={description}
             onDescriptionChange={setDescription}
-            genre={genre}
-            onGenreChange={setGenre}
+            genres={genres}
+            onGenresChange={setGenres}
             cast={cast}
             onCastChange={setCast}
             releaseDate={releaseDate}
@@ -459,13 +516,10 @@ export default function SeriesUploadPage() {
             onDurationChange={setDuration}
             status={status}
             onStatusChange={setStatus}
-            thumbnailFile={thumbnailFile}
-            isDraggingThumbnail={isDraggingThumbnail}
-            thumbnailRef={thumbnailRef}
-            onThumbnailDragOver={handleThumbnailDragOver}
-            onThumbnailDragLeave={handleThumbnailDragLeave}
-            onThumbnailDrop={handleThumbnailDrop}
-            onThumbnailFileChange={handleThumbnailFileChange}
+            trailerUrl={trailerUrl}
+            onTrailerUrlChange={setTrailerUrl}
+            artworkByRole={artworkByRole}
+            onArtworkChange={handleArtworkChange}
           />
         )}
 
@@ -516,14 +570,15 @@ export default function SeriesUploadPage() {
         {/* Step 4: Review */}
         {step === 4 && (
           <StepReviewCard
-            thumbnailFile={thumbnailFile}
-            thumbnailPreviewUrl={thumbnailPreviewUrl}
+            artworkByRole={artworkByRole}
+            artworkPreviewUrls={artworkPreviewUrls}
             seriesAccess={seriesAccess}
             title={title}
             titleKh={titleKh}
             description={description}
             cast={cast}
-            genre={genre}
+            genres={genres}
+            trailerUrl={trailerUrl}
             episodes={episodes}
           />
         )}

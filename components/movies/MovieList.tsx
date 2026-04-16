@@ -7,6 +7,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { toastError, toastSuccess } from "@/lib/toast";
 import type { Movie, MovieStatus } from "@/types";
+import { formatGenresDisplay } from "@/lib/genre-utils";
 import { ChevronLeft, ChevronRight, Film, Pencil, Trash2, Video } from "lucide-react";
 
 interface MovieListProps {
@@ -33,6 +34,10 @@ function formatDuration(mins: number | null): string {
   if (!mins) return "—";
   if (mins < 60) return `${mins}m`;
   return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+}
+
+function getMovieListImage(movie: Movie): string | null {
+  return movie.cover_url ?? movie.thumbnail_url;
 }
 
 type MovieDisplayStatus = MovieStatus | "uploading";
@@ -183,7 +188,7 @@ export function MovieList({
                   Khmer Title
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  Genre
+                  Genres
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   Status
@@ -207,7 +212,9 @@ export function MovieList({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {movies.map((movie) => (
+              {movies.map((movie) => {
+                const listRowImage = getMovieListImage(movie);
+                return (
                 <tr
                   key={movie.id}
                   onClick={() => router.push(`/movies/${movie.id}`)}
@@ -217,8 +224,15 @@ export function MovieList({
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="shrink-0 w-9 h-12 rounded-md overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                        {movie.thumbnail_url ? (
-                          <Image src={movie.thumbnail_url} alt={movie.title} width={36} height={48} unoptimized className="w-full h-full object-cover" />
+                        {listRowImage ? (
+                          <Image
+                            src={listRowImage}
+                            alt={movie.title}
+                            width={36}
+                            height={48}
+                            unoptimized
+                            className="w-full h-full object-cover"
+                          />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-slate-400">
                             <Video className="w-4 h-4" />
@@ -236,9 +250,11 @@ export function MovieList({
                     {movie.title_kh ?? "—"}
                   </td>
 
-                  {/* Genre */}
-                  <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                    {movie.genre ?? "—"}
+                  {/* Genres */}
+                  <td className="px-4 py-3 text-slate-500 dark:text-slate-400 max-w-52">
+                    <span className="line-clamp-2 text-sm" title={formatGenresDisplay(movie.genre) || undefined}>
+                      {formatGenresDisplay(movie.genre) || "—"}
+                    </span>
                   </td>
 
                   {/* Status */}
@@ -302,7 +318,8 @@ export function MovieList({
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

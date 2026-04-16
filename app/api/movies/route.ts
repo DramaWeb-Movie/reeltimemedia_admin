@@ -13,6 +13,8 @@ function mapSupabaseRow(row: Record<string, unknown>): Movie {
     release_date: row.release_date ? String(row.release_date).slice(0, 10) : null,
     duration: row.duration != null ? Number(row.duration) : null,
     thumbnail_url: (row.thumbnail_url as string) ?? null,
+    cover_url: (row.cover_url as string) ?? null,
+    promotion_banner_url: (row.promotion_banner_url as string) ?? null,
     video_url: (row.video_url as string) ?? null,
     status: (row.status as Movie["status"]) ?? "draft",
     type: (row.type as Movie["type"]) ?? "single",

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateMovieUploadUrls } from "@/lib/r2/presigned";
 import { requireAuth } from "@/lib/auth/requireAuth";
+import { ALLOWED_IMAGE_TYPES } from "@/lib/r2/mime";
 
 export const runtime = "nodejs";
 
@@ -21,6 +22,7 @@ export const runtime = "nodejs";
  *   trailerUrl?: string;
  *   videoType: string; // MIME type e.g. "video/mp4"
  *   thumbnailType: string; // MIME type e.g. "image/jpeg"
+ *   coverType: string;
  * }
  * 
  * Returns: {
@@ -29,6 +31,7 @@ export const runtime = "nodejs";
  *   uploadUrls: {
  *     video: { uploadUrl: string; key: string; publicUrl: string };
  *     thumbnail: { uploadUrl: string; key: string; publicUrl: string };
+ *     cover: { uploadUrl: string; key: string; publicUrl: string };
  *   }
  * }
  */
@@ -50,7 +53,10 @@ export async function POST(request: NextRequest) {
       status = "draft",
       trailerUrl,
       videoType,
-      thumbnailType,
+      thumbnailPhoneType,
+      thumbnailLaptopType,
+      coverPhoneType,
+      coverLaptopType,
     } = body;
 
     // Validate required fields
@@ -60,11 +66,30 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    if (!videoType || !thumbnailType) {
+    if (
+      !videoType ||
+      !thumbnailPhoneType ||
+      !thumbnailLaptopType ||
+      !coverPhoneType ||
+      !coverLaptopType
+    ) {
       return NextResponse.json(
-        { error: "Video type and thumbnail type are required" },
+        { error: "Video type and all four artwork image types are required" },
         { status: 400 }
       );
+    }
+    for (const [label, t] of [
+      ["Thumbnail (phone)", thumbnailPhoneType],
+      ["Thumbnail (laptop)", thumbnailLaptopType],
+      ["Cover (phone)", coverPhoneType],
+      ["Cover (laptop)", coverLaptopType],
+    ] as const) {
+      if (!ALLOWED_IMAGE_TYPES.includes(t)) {
+        return NextResponse.json(
+          { error: `${label}: invalid type. Allowed: ${ALLOWED_IMAGE_TYPES.join(", ")}` },
+          { status: 400 }
+        );
+      }
     }
 
     const supabase = createAdminClient();
@@ -84,6 +109,7 @@ export async function POST(request: NextRequest) {
         price: price ? Number(price) : null,
         trailer_url: trailerUrl || null,
         thumbnail_url: null,
+        cover_url: null,
         video_url: null,
       })
       .select("id")
@@ -104,7 +130,10 @@ export async function POST(request: NextRequest) {
       movieId,
       title.trim(),
       videoType,
-      thumbnailType
+      thumbnailPhoneType,
+      thumbnailLaptopType,
+      coverPhoneType,
+      coverLaptopType
     );
 
     return NextResponse.json({

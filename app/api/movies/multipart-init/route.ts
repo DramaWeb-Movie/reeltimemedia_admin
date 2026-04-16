@@ -20,6 +20,16 @@ const log = createLogger("api:multipart-init");
 
 export const runtime = "nodejs";
 
+function assertImageType(label: string, mime: string): NextResponse | null {
+  if (!ALLOWED_IMAGE_TYPES.includes(mime)) {
+    return NextResponse.json(
+      { error: `${label}: invalid type. Allowed: ${ALLOWED_IMAGE_TYPES.join(", ")}` },
+      { status: 400 }
+    );
+  }
+  return null;
+}
+
 export async function POST(request: NextRequest) {
   const auth = await requireAuth();
   if (auth instanceof NextResponse) return auth;
@@ -35,24 +45,35 @@ export async function POST(request: NextRequest) {
     price,
     releaseDate,
     duration,
-    // finalStatus is what the user wants — kept out of the DB until upload is confirmed
     finalStatus = "draft",
     trailerUrl,
     videoType,
     videoSize,
-    thumbnailType,
-    thumbnailSize,
+    thumbnailPhoneType,
+    thumbnailPhoneSize,
+    thumbnailLaptopType,
+    thumbnailLaptopSize,
+    coverPhoneType,
+    coverPhoneSize,
+    coverLaptopType,
+    coverLaptopSize,
     subtitleFileName,
     partSize,
   } = body;
 
-  // ── Validation ───────────────────────────────────────────────────────────────
   if (!title?.trim()) {
     return NextResponse.json({ error: "Title is required" }, { status: 400 });
   }
-  if (!videoType || !videoSize || !thumbnailType) {
+  if (
+    !videoType ||
+    !videoSize ||
+    !thumbnailPhoneType ||
+    !thumbnailLaptopType ||
+    !coverPhoneType ||
+    !coverLaptopType
+  ) {
     return NextResponse.json(
-      { error: "videoType, videoSize, and thumbnailType are required" },
+      { error: "videoType, videoSize, and all four artwork image types are required" },
       { status: 400 }
     );
   }
@@ -62,11 +83,14 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
-  if (!ALLOWED_IMAGE_TYPES.includes(thumbnailType)) {
-    return NextResponse.json(
-      { error: `Invalid thumbnail type. Allowed: ${ALLOWED_IMAGE_TYPES.join(", ")}` },
-      { status: 400 }
-    );
+  for (const [label, t] of [
+    ["Thumbnail (phone)", thumbnailPhoneType],
+    ["Thumbnail (laptop)", thumbnailLaptopType],
+    ["Cover (phone)", coverPhoneType],
+    ["Cover (laptop)", coverLaptopType],
+  ] as const) {
+    const err = assertImageType(label, t);
+    if (err) return err;
   }
   if (Number(videoSize) > MAX_VIDEO_BYTES) {
     return NextResponse.json(
@@ -74,11 +98,18 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
-  if (thumbnailSize && Number(thumbnailSize) > MAX_IMAGE_BYTES) {
-    return NextResponse.json(
-      { error: `Thumbnail too large. Maximum is ${MAX_IMAGE_BYTES / 1024 / 1024}MB` },
-      { status: 400 }
-    );
+  for (const [label, sz] of [
+    ["Thumbnail (phone)", thumbnailPhoneSize],
+    ["Thumbnail (laptop)", thumbnailLaptopSize],
+    ["Cover (phone)", coverPhoneSize],
+    ["Cover (laptop)", coverLaptopSize],
+  ] as const) {
+    if (sz && Number(sz) > MAX_IMAGE_BYTES) {
+      return NextResponse.json(
+        { error: `${label} too large. Maximum is ${MAX_IMAGE_BYTES / 1024 / 1024}MB` },
+        { status: 400 }
+      );
+    }
   }
   if (!["draft", "published"].includes(finalStatus)) {
     return NextResponse.json({ error: "Invalid status" }, { status: 400 });
@@ -86,9 +117,6 @@ export async function POST(request: NextRequest) {
 
   const supabase = createAdminClient();
 
-  // Create the movie record with status "uploading" so it is never visible
-  // to end-users during the upload process. The complete route promotes it
-  // to the user's chosen finalStatus once all files are safely in R2.
   const { data: movie, error: insertError } = await supabase
     .from("movies")
     .insert({
@@ -104,6 +132,7 @@ export async function POST(request: NextRequest) {
       price: price ? Number(price) : null,
       trailer_url: trailerUrl || null,
       thumbnail_url: null,
+      cover_url: null,
       video_url: null,
     })
     .select("id")
@@ -120,7 +149,6 @@ export async function POST(request: NextRequest) {
   const movieId = movie.id;
   const movieTitle = title.trim();
 
-  // Track multipart state so we can abort on error
   let multipartUploadId: string | null = null;
   let multipartKey: string | null = null;
 
@@ -135,10 +163,18 @@ export async function POST(request: NextRequest) {
     multipartUploadId = multipart.upload.uploadId;
     multipartKey = multipart.upload.key;
 
-    const thumbnailExt = getExtension(thumbnailType, "jpg");
     const base = movieStorageDir(movieTitle, movieId);
-    const thumbnailKey = `${base}/thumbnail.${thumbnailExt}`;
-    const thumbnail = await generatePresignedUploadUrl(thumbnailKey, thumbnailType);
+    const tpExt = getExtension(thumbnailPhoneType, "jpg");
+    const tlExt = getExtension(thumbnailLaptopType, "jpg");
+    const cpExt = getExtension(coverPhoneType, "jpg");
+    const clExt = getExtension(coverLaptopType, "jpg");
+
+    const [thumbnailPhone, thumbnailLaptop, coverPhone, coverLaptop] = await Promise.all([
+      generatePresignedUploadUrl(`${base}/thumbnail-phone.${tpExt}`, thumbnailPhoneType),
+      generatePresignedUploadUrl(`${base}/thumbnail-laptop.${tlExt}`, thumbnailLaptopType),
+      generatePresignedUploadUrl(`${base}/cover-phone.${cpExt}`, coverPhoneType),
+      generatePresignedUploadUrl(`${base}/cover-laptop.${clExt}`, coverLaptopType),
+    ]);
 
     let subtitle = null;
     if (subtitleFileName) {
@@ -154,6 +190,11 @@ export async function POST(request: NextRequest) {
       partSizeBytes: multipart.partSize,
     });
 
+    const slot = (p: { uploadUrl: string; key: string }) => ({
+      uploadUrl: p.uploadUrl,
+      key: p.key,
+    });
+
     return NextResponse.json({
       success: true,
       movieId,
@@ -165,21 +206,19 @@ export async function POST(request: NextRequest) {
         partSize: multipart.partSize,
         totalParts: multipart.totalParts,
       },
-      thumbnail: {
-        uploadUrl: thumbnail.uploadUrl,
-        key: thumbnail.key,
-      },
+      thumbnailPhone: slot(thumbnailPhone),
+      thumbnailLaptop: slot(thumbnailLaptop),
+      coverPhone: slot(coverPhone),
+      coverLaptop: slot(coverLaptop),
       subtitle: subtitle
         ? { uploadUrl: subtitle.uploadUrl, key: subtitle.key }
         : null,
     });
   } catch (err) {
     log.error("Failed to initialize upload, cleaning up orphaned resources", { movieId });
-    // Delete the orphaned movie row
     try {
       await supabase.from("movies").delete().eq("id", movieId);
     } catch { /* best-effort */ }
-    // Abort the multipart upload in R2 if it was created
     if (multipartUploadId && multipartKey) {
       await abortMultipartUpload(multipartKey, multipartUploadId).catch(() => {});
     }

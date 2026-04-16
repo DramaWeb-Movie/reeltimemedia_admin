@@ -7,10 +7,12 @@
 --   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 --   title VARCHAR(255) NOT NULL,
 --   description TEXT,
---   genre VARCHAR(100),
+--   genre TEXT, -- comma-separated when multiple
 --   release_date DATE,
 --   duration INTEGER, -- in minutes
 --   thumbnail_url TEXT,
+--   cover_url TEXT,
+--   promotion_banner_url TEXT, -- dedicated banner art for promoted placements
 --   video_url TEXT,
 --   status VARCHAR(50) DEFAULT 'draft', -- draft, published, archived
 --   type VARCHAR(50) NOT NULL, -- 'series' or 'single'

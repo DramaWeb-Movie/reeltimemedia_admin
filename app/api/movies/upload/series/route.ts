@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { uploadThumbnail, uploadEpisodeVideo } from "@/lib/r2/upload";
+import { uploadArtworkImage, uploadEpisodeVideo } from "@/lib/r2/upload";
 import { requireAuth } from "@/lib/auth/requireAuth";
 import { notifyNewMovieChannels } from "@/lib/notifications/new-movie-channels";
 import { createLogger } from "@/lib/logger";
@@ -36,7 +36,12 @@ export async function POST(request: Request) {
     const freeEpisodesCount = formData.get("freeEpisodesCount") != null ? Number(formData.get("freeEpisodesCount")) : null;
     const totalEpisodes = formData.get("totalEpisodes") != null ? Number(formData.get("totalEpisodes")) : null;
     const subscriptionPlanId = (formData.get("subscriptionPlanId") as string) || null;
-    const thumbnailFile = formData.get("thumbnail") as File | null;
+    const trailerUrlRaw = (formData.get("trailerUrl") as string) || "";
+    const trailerUrl = trailerUrlRaw.trim() || null;
+    const thumbnailPhoneFile = formData.get("thumbnailPhone") as File | null;
+    const thumbnailLaptopFile = formData.get("thumbnailLaptop") as File | null;
+    const coverPhoneFile = formData.get("coverPhone") as File | null;
+    const coverLaptopFile = formData.get("coverLaptop") as File | null;
 
     const episodesJson = formData.get("episodes") as string | null;
     let episodesMeta: EpisodeMeta[] = [];
@@ -51,8 +56,12 @@ export async function POST(request: Request) {
     const titleError = validateTitle(title);
     if (titleError) return NextResponse.json({ error: titleError }, { status: 400 });
 
-    const thumbError = validateFilePresent(thumbnailFile, "Cover image");
-    if (thumbError) return NextResponse.json({ error: thumbError }, { status: 400 });
+    const artErr =
+      validateFilePresent(thumbnailPhoneFile, "Thumbnail (phone)") ??
+      validateFilePresent(thumbnailLaptopFile, "Thumbnail (laptop)") ??
+      validateFilePresent(coverPhoneFile, "Movie cover (phone)") ??
+      validateFilePresent(coverLaptopFile, "Movie cover (laptop)");
+    if (artErr) return NextResponse.json({ error: artErr }, { status: 400 });
 
     if (episodesMeta.length === 0) {
       return NextResponse.json({ error: "At least one episode is required" }, { status: 400 });
@@ -76,8 +85,9 @@ export async function POST(request: Request) {
         total_episodes: totalEpisodes,
         subscription_plan_id: subscriptionPlanId || null,
         thumbnail_url: null,
+        cover_url: null,
         video_url: null,
-        trailer_url: null,
+        trailer_url: trailerUrl,
       })
       .select("id")
       .single();
@@ -96,13 +106,21 @@ export async function POST(request: Request) {
 
     const movieId = movie.id;
 
-    let thumbnailUrl: string | null = null;
+    let thumbnailPhoneUrl: string;
+    let thumbnailLaptopUrl: string;
+    let coverPhoneUrl: string;
+    let coverLaptopUrl: string;
     try {
-      thumbnailUrl = await uploadThumbnail(movieId, title, thumbnailFile!);
+      [thumbnailPhoneUrl, thumbnailLaptopUrl, coverPhoneUrl, coverLaptopUrl] = await Promise.all([
+        uploadArtworkImage(movieId, title, thumbnailPhoneFile!, "thumbnail-phone"),
+        uploadArtworkImage(movieId, title, thumbnailLaptopFile!, "thumbnail-laptop"),
+        uploadArtworkImage(movieId, title, coverPhoneFile!, "cover-phone"),
+        uploadArtworkImage(movieId, title, coverLaptopFile!, "cover-laptop"),
+      ]);
     } catch (uploadErr) {
-      log.error("Thumbnail upload error", uploadErr);
+      log.error("Image upload error", uploadErr);
       return NextResponse.json(
-        { error: uploadErr instanceof Error ? uploadErr.message : "Failed to upload cover image" },
+        { error: uploadErr instanceof Error ? uploadErr.message : "Failed to upload images" },
         { status: 500 }
       );
     }
@@ -110,15 +128,16 @@ export async function POST(request: Request) {
     const { error: updateError } = await supabase
       .from("movies")
       .update({
-        thumbnail_url: thumbnailUrl,
+        thumbnail_url: thumbnailLaptopUrl,
+        cover_url: coverPhoneUrl,
         updated_at: new Date().toISOString(),
       })
       .eq("id", movieId);
 
     if (updateError) {
-      log.error("Failed to save cover image URL", updateError);
+      log.error("Failed to save image URLs", updateError);
       return NextResponse.json(
-        { error: "Series created but cover image could not be saved" },
+        { error: "Series created but image URLs could not be saved" },
         { status: 500 }
       );
     }
@@ -170,7 +189,11 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      movie: { id: movieId, thumbnail_url: thumbnailUrl },
+      movie: {
+        id: movieId,
+        thumbnail_url: thumbnailLaptopUrl,
+        cover_url: coverPhoneUrl,
+      },
     });
   } catch (err) {
     log.error("Series upload error", err);

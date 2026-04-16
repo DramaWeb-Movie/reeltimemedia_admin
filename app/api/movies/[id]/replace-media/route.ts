@@ -17,6 +17,7 @@ import {
   getExtension,
 } from "@/lib/r2/mime";
 import { movieStorageDir, isR2KeyForMovie, hlsOutputPrefixFromSourceVideoKey } from "@/lib/r2/storage-path";
+import type { ArtworkRole } from "@/lib/constants/movie-artwork";
 import { enqueueTranscodeJob } from "@/lib/upload/transcode";
 
 const log = createLogger("api:replace-media");
@@ -30,8 +31,12 @@ function buildPublicUrl(key: string): string {
 
 /**
  * POST /api/movies/[id]/replace-media
- * Generate presigned URLs for replacing the thumbnail and/or video of an existing movie.
- * Body: { thumbnailType?, thumbnailSize?, videoType?, videoSize?, videoPartSize? }
+ * Generate presigned URLs for replacing artwork and/or video of an existing movie.
+ * Body: optional image MIME + size for any of:
+ *   thumbnailPhone*, thumbnailLaptop*, coverPhone*, coverLaptop* (matches upload keys),
+ *   promotionBannerType*, promotionBannerSize*,
+ *   or legacy thumbnailType / coverType (same as laptop thumbnail + phone cover).
+ *   videoType?, videoSize?, videoPartSize?
  */
 export async function POST(
   request: NextRequest,
@@ -42,11 +47,38 @@ export async function POST(
 
   const { id } = await params;
   const body = await request.json();
-  const { thumbnailType, thumbnailSize, videoType, videoSize, videoPartSize } = body;
+  const {
+    thumbnailType,
+    thumbnailSize,
+    coverType,
+    coverSize,
+    thumbnailPhoneType,
+    thumbnailPhoneSize,
+    thumbnailLaptopType,
+    thumbnailLaptopSize,
+    coverPhoneType,
+    coverPhoneSize,
+    coverLaptopType,
+    coverLaptopSize,
+    promotionBannerType,
+    promotionBannerSize,
+    videoType,
+    videoSize,
+    videoPartSize,
+  } = body;
 
-  if (!thumbnailType && !videoType) {
+  const hasAnyImage =
+    thumbnailType ||
+    coverType ||
+    thumbnailPhoneType ||
+    thumbnailLaptopType ||
+    coverPhoneType ||
+    coverLaptopType ||
+    promotionBannerType;
+
+  if (!hasAnyImage && !videoType) {
     return NextResponse.json(
-      { error: "thumbnailType or videoType is required" },
+      { error: "At least one image role, promotion banner, legacy thumbnail/cover, or videoType is required" },
       { status: 400 }
     );
   }
@@ -67,21 +99,74 @@ export async function POST(
 
   const result: Record<string, unknown> = {};
 
+  const presignArtwork = async (
+    role: ArtworkRole,
+    mime: string,
+    size: unknown,
+    label: string
+  ): Promise<NextResponse | null> => {
+    if (!ALLOWED_IMAGE_TYPES.includes(mime)) {
+      return NextResponse.json({ error: `Invalid ${label} type` }, { status: 400 });
+    }
+    if (size && Number(size) > MAX_IMAGE_BYTES) {
+      return NextResponse.json(
+        { error: `${label} too large (max ${MAX_IMAGE_BYTES / 1024 / 1024}MB)` },
+        { status: 400 }
+      );
+    }
+    const ext = getExtension(mime, "jpg");
+    const key = `${base}/${role}-${Date.now()}.${ext}`;
+    const presigned = await generatePresignedUploadUrl(key, mime);
+    const camel =
+      role === "thumbnail-phone"
+        ? "thumbnailPhone"
+        : role === "thumbnail-laptop"
+          ? "thumbnailLaptop"
+          : role === "cover-phone"
+            ? "coverPhone"
+            : "coverLaptop";
+    result[camel] = presigned;
+    return null;
+  };
+
   try {
-    if (thumbnailType) {
-      if (!ALLOWED_IMAGE_TYPES.includes(thumbnailType)) {
-        return NextResponse.json({ error: "Invalid thumbnail type" }, { status: 400 });
+    for (const [mime, size, role, label] of [
+      [thumbnailPhoneType, thumbnailPhoneSize, "thumbnail-phone", "Thumbnail (phone)"] as const,
+      [thumbnailLaptopType, thumbnailLaptopSize, "thumbnail-laptop", "Thumbnail (laptop)"] as const,
+      [coverPhoneType, coverPhoneSize, "cover-phone", "Cover (phone)"] as const,
+      [coverLaptopType, coverLaptopSize, "cover-laptop", "Cover (laptop)"] as const,
+    ]) {
+      if (!mime) continue;
+      const err = await presignArtwork(role, mime, size, label);
+      if (err) return err;
+    }
+
+    // Legacy names: same assets as laptop hero thumbnail + phone list cover
+    if (thumbnailType && !thumbnailLaptopType) {
+      const err = await presignArtwork("thumbnail-laptop", thumbnailType, thumbnailSize, "Thumbnail");
+      if (err) return err;
+      result.thumbnail = result.thumbnailLaptop;
+    }
+
+    if (coverType && !coverPhoneType) {
+      const err = await presignArtwork("cover-phone", coverType, coverSize, "Cover image");
+      if (err) return err;
+      result.cover = result.coverPhone;
+    }
+
+    if (promotionBannerType) {
+      if (!ALLOWED_IMAGE_TYPES.includes(promotionBannerType)) {
+        return NextResponse.json({ error: "Invalid promotion banner type" }, { status: 400 });
       }
-      if (thumbnailSize && Number(thumbnailSize) > MAX_IMAGE_BYTES) {
+      if (promotionBannerSize && Number(promotionBannerSize) > MAX_IMAGE_BYTES) {
         return NextResponse.json(
-          { error: `Thumbnail too large (max ${MAX_IMAGE_BYTES / 1024 / 1024}MB)` },
+          { error: `Promotion banner too large (max ${MAX_IMAGE_BYTES / 1024 / 1024}MB)` },
           { status: 400 }
         );
       }
-      const ext = getExtension(thumbnailType, "jpg");
-      const key = `${base}/thumbnail.${ext}`;
-      const presigned = await generatePresignedUploadUrl(key, thumbnailType);
-      result.thumbnail = presigned;
+      const ext = getExtension(promotionBannerType, "jpg");
+      const key = `${base}/promotion-banner-${Date.now()}.${ext}`;
+      result.promotionBanner = await generatePresignedUploadUrl(key, promotionBannerType);
     }
 
     if (videoType) {

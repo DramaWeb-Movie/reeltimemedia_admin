@@ -4,6 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { MovieHeroSection } from "@/components/movies/detail/MovieHeroSection";
@@ -12,6 +13,7 @@ import { SeriesEpisodesSection } from "@/components/movies/detail/SeriesEpisodes
 import { MovieDetailsCard } from "@/components/movies/detail/MovieDetailsCard";
 import type { SeriesEpisode } from "@/components/movies/detail/types";
 import type { Movie } from "@/types";
+import { Film } from "lucide-react";
 
 export default function MovieDetailPage() {
   const params = useParams();
@@ -69,27 +71,43 @@ export default function MovieDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-105">
-        <Spinner size="lg" />
+      <div className="min-h-[420px] overflow-hidden rounded-[32px] border border-slate-200/80 bg-linear-to-br from-white via-slate-50 to-slate-100 dark:border-slate-700/80 dark:from-slate-900 dark:via-slate-900/80 dark:to-slate-800/70">
+        <div className="flex h-full min-h-[420px] flex-col items-center justify-center gap-4 px-6 text-center">
+          <div className="rounded-full border border-slate-200/80 bg-white/90 p-4 shadow-sm dark:border-slate-700/80 dark:bg-slate-900/90">
+            <Spinner size="lg" />
+          </div>
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-slate-900 dark:text-white">Loading movie workspace</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Bringing together artwork, playback, and admin details.
+            </p>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (!movie) {
     return (
-      <div className="text-center py-20">
-        <p className="text-slate-600 dark:text-slate-400">Movie not found.</p>
-        <Link href="/movies" className="inline-block mt-4">
+      <Card className="mx-auto max-w-2xl rounded-[32px] border-dashed px-6 py-14 text-center md:px-10">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-red-500/10 text-red-500 dark:bg-red-500/15 dark:text-red-400">
+          <Film className="h-8 w-8" />
+        </div>
+        <h1 className="mt-6 text-2xl font-semibold text-slate-900 dark:text-white">Movie not found</h1>
+        <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-slate-500 dark:text-slate-400">
+          This title may have been removed, or the link may be out of date. Head back to the movie library to continue managing your catalog.
+        </p>
+        <Link href="/movies" className="mt-6 inline-block">
           <Button variant="secondary">Back to Movies</Button>
         </Link>
-      </div>
+      </Card>
     );
   }
 
   const isSeries = movie.type === "series";
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 pb-8">
       <MovieHeroSection
         movie={movie}
         id={id}
@@ -98,19 +116,24 @@ export default function MovieDetailPage() {
         onDeleteClick={() => setShowDeleteConfirm(true)}
       />
 
-      <MovieMediaSection movie={movie} />
+      <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="space-y-8">
+          <MovieMediaSection movie={movie} />
 
-      {/* Episodes (series only) */}
-      {isSeries ? (
-        <SeriesEpisodesSection
-          movieId={id}
-          episodes={episodes}
-          selectedEpisodeIndex={selectedEpisodeIndex}
-          setSelectedEpisodeIndex={setSelectedEpisodeIndex}
-        />
-      ) : null}
+          {isSeries ? (
+            <SeriesEpisodesSection
+              movieId={id}
+              episodes={episodes}
+              selectedEpisodeIndex={selectedEpisodeIndex}
+              setSelectedEpisodeIndex={setSelectedEpisodeIndex}
+            />
+          ) : null}
+        </div>
 
-      <MovieDetailsCard movie={movie} />
+        <div className="xl:sticky xl:top-6 xl:self-start">
+          <MovieDetailsCard movie={movie} />
+        </div>
+      </div>
 
       <ConfirmDialog
         isOpen={showDeleteConfirm}

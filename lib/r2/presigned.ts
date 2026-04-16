@@ -45,29 +45,45 @@ export async function generatePresignedUploadUrl(
 }
 
 /**
- * Generate presigned URLs for movie upload (video, thumbnail, optional subtitle)
+ * Generate presigned URLs for movie upload (video, four responsive artwork images, optional subtitle)
  */
 export async function generateMovieUploadUrls(
   movieId: string,
   title: string,
   videoType: string,
-  thumbnailType: string,
+  thumbnailPhoneType: string,
+  thumbnailLaptopType: string,
+  coverPhoneType: string,
+  coverLaptopType: string,
   subtitleFileName?: string
 ): Promise<{
   video: PresignedUrlResult;
-  thumbnail: PresignedUrlResult;
+  thumbnailPhone: PresignedUrlResult;
+  thumbnailLaptop: PresignedUrlResult;
+  coverPhone: PresignedUrlResult;
+  coverLaptop: PresignedUrlResult;
   subtitle: PresignedUrlResult | null;
 }> {
   const videoExt = getExtension(videoType, "mp4");
-  const thumbnailExt = getExtension(thumbnailType, "jpg");
   const base = movieStorageDir(title, movieId);
 
   const videoKey = `${base}/video.${videoExt}`;
-  const thumbnailKey = `${base}/thumbnail.${thumbnailExt}`;
+  const tpExt = getExtension(thumbnailPhoneType, "jpg");
+  const tlExt = getExtension(thumbnailLaptopType, "jpg");
+  const cpExt = getExtension(coverPhoneType, "jpg");
+  const clExt = getExtension(coverLaptopType, "jpg");
 
-  const [video, thumbnail] = await Promise.all([
+  const thumbnailPhoneKey = `${base}/thumbnail-phone.${tpExt}`;
+  const thumbnailLaptopKey = `${base}/thumbnail-laptop.${tlExt}`;
+  const coverPhoneKey = `${base}/cover-phone.${cpExt}`;
+  const coverLaptopKey = `${base}/cover-laptop.${clExt}`;
+
+  const [video, thumbnailPhone, thumbnailLaptop, coverPhone, coverLaptop] = await Promise.all([
     generatePresignedUploadUrl(videoKey, videoType),
-    generatePresignedUploadUrl(thumbnailKey, thumbnailType),
+    generatePresignedUploadUrl(thumbnailPhoneKey, thumbnailPhoneType),
+    generatePresignedUploadUrl(thumbnailLaptopKey, thumbnailLaptopType),
+    generatePresignedUploadUrl(coverPhoneKey, coverPhoneType),
+    generatePresignedUploadUrl(coverLaptopKey, coverLaptopType),
   ]);
 
   let subtitle: PresignedUrlResult | null = null;
@@ -78,6 +94,5 @@ export async function generateMovieUploadUrls(
     subtitle = await generatePresignedUploadUrl(subtitleKey, contentType);
   }
 
-  return { video, thumbnail, subtitle };
+  return { video, thumbnailPhone, thumbnailLaptop, coverPhone, coverLaptop, subtitle };
 }
-

@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/Input";
 import { CastInput } from "@/components/ui/CastInput";
 import { Select } from "@/components/ui/Select";
 import { toastError, toastSuccess } from "@/lib/toast";
-import { GENRE_OPTIONS } from "@/lib/constants/genres";
+import { serializeGenresToDb } from "@/lib/genre-utils";
+import { GenreMultiSelect } from "@/components/ui/GenreMultiSelect";
 import {
   uploadFileInParallel,
   formatBytes,
@@ -19,14 +20,34 @@ import {
 } from "@/lib/upload/parallel-uploader";
 import { createLogger } from "@/lib/logger";
 import { MAX_VIDEO_BYTES, MAX_IMAGE_BYTES } from "@/lib/r2/mime";
+import type { ArtworkRole } from "@/lib/constants/movie-artwork";
+import { ARTWORK_ROLES_ORDER } from "@/lib/constants/movie-artwork";
+import { ArtworkDropSlot } from "@/components/upload/ArtworkDropSlot";
 
 const log = createLogger("upload:single");
 
+function releaseYearToDate(value: string): string | null {
+  const year = value.trim();
+  if (!year) return null;
+  if (!/^\d{4}$/.test(year)) return null;
+  return `${year}-01-01`;
+}
+
+function emptyArtwork(): Record<ArtworkRole, File | null> {
+  return {
+    "thumbnail-phone": null,
+    "thumbnail-laptop": null,
+    "cover-phone": null,
+    "cover-laptop": null,
+  };
+}
+
 const STEPS = [
   { id: 1, title: "Info", description: "Title, cast" },
-  { id: 2, title: "Media", description: "Video & pricing" },
-  { id: 3, title: "Details", description: "Date, duration" },
-  { id: 4, title: "Review", description: "Confirm & upload" },
+  { id: 2, title: "Media", description: "Video & artwork" },
+  { id: 3, title: "Pricing", description: "Free or paid" },
+  { id: 4, title: "Details", description: "Year, duration" },
+  { id: 5, title: "Review", description: "Confirm & upload" },
 ] as const;
 
 export default function SingleMovieUploadPage() {
@@ -43,18 +64,16 @@ export default function SingleMovieUploadPage() {
   const [title, setTitle] = useState("");
   const [titleKh, setTitleKh] = useState("");
   const [description, setDescription] = useState("");
-  const [genre, setGenre] = useState("");
+  const [genres, setGenres] = useState<string[]>([]);
   const [cast, setCast] = useState("");
 
   // Step 2: Media
   const [pricingType, setPricingType] = useState<"free" | "paid">("paid");
   const [price, setPrice] = useState("2.99");
   const [singleVideoFile, setSingleVideoFile] = useState<File | null>(null);
-  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
+  const [artworkByRole, setArtworkByRole] = useState<Record<ArtworkRole, File | null>>(emptyArtwork);
   const [isDraggingVideo, setIsDraggingVideo] = useState(false);
-  const [isDraggingThumbnail, setIsDraggingThumbnail] = useState(false);
   const singleVideoRef = useRef<HTMLInputElement>(null);
-  const thumbnailRef = useRef<HTMLInputElement>(null);
 
   // Step 3: Details
   const [releaseDate, setReleaseDate] = useState("");
@@ -62,9 +81,18 @@ export default function SingleMovieUploadPage() {
   const [status, setStatus] = useState<"draft" | "published">("draft");
   const [trailerUrl, setTrailerUrl] = useState("");
 
+  const thumbnailArtworkFile = artworkByRole["thumbnail-laptop"] ?? artworkByRole["thumbnail-phone"];
+  const coverArtworkFile = artworkByRole["cover-phone"] ?? artworkByRole["cover-laptop"];
+
   const canProceed = () => {
     if (step === 1) return !!title.trim();
-    if (step === 2) return !!singleVideoFile && !!thumbnailFile;
+    if (step === 2) {
+      return !!singleVideoFile && !!thumbnailArtworkFile && !!coverArtworkFile;
+    }
+    if (step === 3 && pricingType === "paid") {
+      const p = parseFloat(price);
+      return !!price.trim() && !isNaN(p) && p >= 0.01;
+    }
     return true;
   };
 
@@ -78,21 +106,23 @@ export default function SingleMovieUploadPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (step < 4) {
+    if (step < 5) {
       handleNext();
       return;
     }
-    if (!singleVideoFile || !thumbnailFile) {
-      toastError("Video and thumbnail are required");
+    if (!singleVideoFile || !thumbnailArtworkFile || !coverArtworkFile) {
+      toastError("Video, thumbnail, and movie cover are required");
       return;
     }
     if (singleVideoFile.size > MAX_VIDEO_BYTES) {
       toastError(`Video is too large. Maximum size is ${MAX_VIDEO_BYTES / 1024 / 1024 / 1024}GB`);
       return;
     }
-    if (thumbnailFile.size > MAX_IMAGE_BYTES) {
-      toastError(`Thumbnail is too large. Maximum size is ${MAX_IMAGE_BYTES / 1024 / 1024}MB`);
-      return;
+    for (const img of [thumbnailArtworkFile, coverArtworkFile]) {
+      if (img.size > MAX_IMAGE_BYTES) {
+        toastError(`Each image must be at most ${MAX_IMAGE_BYTES / 1024 / 1024}MB`);
+        return;
+      }
     }
     if (pricingType === "paid") {
       const p = parseFloat(price);
@@ -117,17 +147,23 @@ export default function SingleMovieUploadPage() {
           title: title.trim(),
           title_kh: titleKh.trim() || null,
           description,
-          genre,
+          genre: serializeGenresToDb(genres),
           cast,
           price: pricingType === "paid" && price.trim() ? parseFloat(price) : null,
-          releaseDate,
+          releaseDate: releaseYearToDate(releaseDate),
           duration: duration ? parseInt(duration, 10) : null,
           finalStatus: status,
           trailerUrl,
           videoType: singleVideoFile.type,
           videoSize: singleVideoFile.size,
-          thumbnailType: thumbnailFile.type,
-          thumbnailSize: thumbnailFile.size,
+          thumbnailPhoneType: thumbnailArtworkFile.type,
+          thumbnailPhoneSize: thumbnailArtworkFile.size,
+          thumbnailLaptopType: thumbnailArtworkFile.type,
+          thumbnailLaptopSize: thumbnailArtworkFile.size,
+          coverPhoneType: coverArtworkFile.type,
+          coverPhoneSize: coverArtworkFile.size,
+          coverLaptopType: coverArtworkFile.type,
+          coverLaptopSize: coverArtworkFile.size,
         }),
       });
 
@@ -136,18 +172,29 @@ export default function SingleMovieUploadPage() {
         throw new Error(initData.error ?? "Failed to initialize upload");
       }
 
-      const { movieId, video, thumbnail, finalStatus: confirmedStatus } = initData;
+      const {
+        movieId,
+        video,
+        thumbnailPhone,
+        thumbnailLaptop,
+        coverPhone,
+        coverLaptop,
+        finalStatus: confirmedStatus,
+      } = initData;
       log.info("Upload initialized", { movieId, chunks: video.totalParts });
 
       // Store so the catch block can abort R2 + delete DB record if anything fails
       uploadMetaRef.current = { movieId, uploadId: video.uploadId, key: video.key };
 
-      // Step 2a: Kick off thumbnail upload immediately — runs in parallel with the video
-      const thumbnailPromise = fetch(thumbnail.uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": thumbnailFile.type },
-        body: thumbnailFile,
-      });
+      const putArt = (url: string, f: File) =>
+        fetch(url, { method: "PUT", headers: { "Content-Type": f.type }, body: f });
+
+      const imagePromises = Promise.all([
+        putArt(thumbnailPhone.uploadUrl, thumbnailArtworkFile),
+        putArt(thumbnailLaptop.uploadUrl, thumbnailArtworkFile),
+        putArt(coverPhone.uploadUrl, coverArtworkFile),
+        putArt(coverLaptop.uploadUrl, coverArtworkFile),
+      ]);
 
       // Step 2b: Upload video chunks in parallel
       log.info("Starting parallel upload", { concurrency: 8 });
@@ -172,10 +219,10 @@ export default function SingleMovieUploadPage() {
       });
       setUploadProgress(92);
 
-      // Step 3: Await thumbnail (almost certainly already done)
-      const thumbRes = await thumbnailPromise;
-      if (!thumbRes.ok) {
-        throw new Error("Thumbnail upload failed");
+      const imageResponses = await imagePromises;
+      const failed = imageResponses.find((r) => !r.ok);
+      if (failed) {
+        throw new Error("One or more artwork uploads failed");
       }
       setUploadProgress(95);
 
@@ -190,7 +237,10 @@ export default function SingleMovieUploadPage() {
           movieId,
           uploadId: video.uploadId,
           key: video.key,
-          thumbnailKey: thumbnail.key,
+          thumbnailPhoneKey: thumbnailPhone.key,
+          thumbnailLaptopKey: thumbnailLaptop.key,
+          coverPhoneKey: coverPhone.key,
+          coverLaptopKey: coverLaptop.key,
           parts: uploadResult.parts,
           finalStatus: confirmedStatus,
         }),
@@ -308,99 +358,135 @@ export default function SingleMovieUploadPage() {
                 />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Select label="Genre" options={GENRE_OPTIONS} value={genre} onChange={(e) => setGenre(e.target.value)} placeholder="Select genre" />
+                <GenreMultiSelect
+                  value={genres}
+                  onChange={setGenres}
+                  hint="Pick from the list and/or add your own below."
+                />
                 <CastInput label="Cast" value={cast} onChange={setCast} placeholder="Actor name" />
               </div>
             </div>
           </Card>
         )}
 
-        {/* Step 2: Video, Thumbnail, Pricing */}
+        {/* Step 2: Video, Thumbnail, Cover */}
         {step === 2 && (
-          <div className="space-y-6">
-            <Card>
-              <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-4">Step 2: Video & Thumbnail</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <div>
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Video File (MP4, WebM)</p>
-                  <div
-                    onDragOver={(e) => { e.preventDefault(); setIsDraggingVideo(true); }}
-                    onDragLeave={() => setIsDraggingVideo(false)}
-                    onDrop={(e) => { e.preventDefault(); setIsDraggingVideo(false); const f = e.dataTransfer.files[0]; if (f?.type.startsWith("video/")) setSingleVideoFile(f); }}
-                    onClick={() => singleVideoRef.current?.click()}
-                    className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${singleVideoFile ? "border-emerald-500/50 bg-emerald-500/10" : isDraggingVideo ? "border-red-500 bg-red-500/10" : "border-slate-300 dark:border-slate-700 hover:border-slate-400"}`}
-                  >
-                    <input ref={singleVideoRef} type="file" accept="video/mp4,video/webm" className="hidden" onChange={(e) => setSingleVideoFile(e.target.files?.[0] ?? null)} />
-                    {singleVideoFile ? <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">{singleVideoFile.name}</p> : <><svg className="w-10 h-10 mx-auto text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg><p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Drop video or click</p></>}
-                  </div>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Thumbnail (JPG, PNG)</p>
-                  <div
-                    onDragOver={(e) => { e.preventDefault(); setIsDraggingThumbnail(true); }}
-                    onDragLeave={() => setIsDraggingThumbnail(false)}
-                    onDrop={(e) => { e.preventDefault(); setIsDraggingThumbnail(false); const f = e.dataTransfer.files[0]; if (f?.type.startsWith("image/")) setThumbnailFile(f); }}
-                    onClick={() => thumbnailRef.current?.click()}
-                    className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${thumbnailFile ? "border-emerald-500/50 bg-emerald-500/10" : isDraggingThumbnail ? "border-red-500 bg-red-500/10" : "border-slate-300 dark:border-slate-700 hover:border-slate-400"}`}
-                  >
-                    <input ref={thumbnailRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => setThumbnailFile(e.target.files?.[0] ?? null)} />
-                    {thumbnailFile ? <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">{thumbnailFile.name}</p> : <><svg className="w-10 h-10 mx-auto text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg><p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Drop image or click</p></>}
-                  </div>
+          <Card>
+            <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-4">Step 2: Video & images</h3>
+            <div className="space-y-6">
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                Upload two images only: one movie thumbnail and one movie cover.
+              </p>
+              <div>
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Video file (MP4, WebM)</p>
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setIsDraggingVideo(true); }}
+                  onDragLeave={() => setIsDraggingVideo(false)}
+                  onDrop={(e) => { e.preventDefault(); setIsDraggingVideo(false); const f = e.dataTransfer.files[0]; if (f?.type.startsWith("video/")) setSingleVideoFile(f); }}
+                  onClick={() => singleVideoRef.current?.click()}
+                  className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${singleVideoFile ? "border-emerald-500/50 bg-emerald-500/10" : isDraggingVideo ? "border-red-500 bg-red-500/10" : "border-slate-300 dark:border-slate-700 hover:border-slate-400"}`}
+                >
+                  <input ref={singleVideoRef} type="file" accept="video/mp4,video/webm" className="hidden" onChange={(e) => setSingleVideoFile(e.target.files?.[0] ?? null)} />
+                  {singleVideoFile ? <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">{singleVideoFile.name}</p> : <><svg className="w-10 h-10 mx-auto text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg><p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Drop video or click</p></>}
                 </div>
               </div>
-            </Card>
-            <Card>
-              <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-4">Pricing</h3>
-              <div className="space-y-4">
-                <div>
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Access</p>
-                  <div className="flex gap-4">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="pricingType"
-                        checked={pricingType === "free"}
-                        onChange={() => setPricingType("free")}
-                        className="rounded-full border-slate-300 dark:border-slate-600 text-red-500 focus:ring-red-500/50"
-                      />
-                      <span className="text-sm text-slate-700 dark:text-slate-300">Free</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="pricingType"
-                        checked={pricingType === "paid"}
-                        onChange={() => setPricingType("paid")}
-                        className="rounded-full border-slate-300 dark:border-slate-600 text-red-500 focus:ring-red-500/50"
-                      />
-                      <span className="text-sm text-slate-700 dark:text-slate-300">Paid</span>
-                    </label>
-                  </div>
-                </div>
-                {pricingType === "paid" && (
-                  <Input
-                    label="Price (USD)"
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
-                    placeholder="2.99"
-                    hint="One-time purchase price"
+              <div>
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">Artwork (two files)</p>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <ArtworkDropSlot
+                    role="thumbnail-laptop"
+                    label="Movie thumbnail"
+                    description="Main thumbnail image for this movie."
+                    file={thumbnailArtworkFile}
+                    onChange={(f) =>
+                      setArtworkByRole((prev) => ({
+                        ...prev,
+                        "thumbnail-phone": f,
+                        "thumbnail-laptop": f,
+                      }))
+                    }
                   />
-                )}
+                  <ArtworkDropSlot
+                    role="cover-phone"
+                    label="Movie cover"
+                    description="Main cover image for this movie."
+                    file={coverArtworkFile}
+                    onChange={(f) =>
+                      setArtworkByRole((prev) => ({
+                        ...prev,
+                        "cover-phone": f,
+                        "cover-laptop": f,
+                      }))
+                    }
+                  />
+                </div>
               </div>
-            </Card>
-          </div>
+            </div>
+          </Card>
         )}
 
-        {/* Step 3: Details */}
+        {/* Step 3: Pricing */}
         {step === 3 && (
           <Card>
-            <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-4">Step 3: Details</h3>
+            <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-4">Step 3: Pricing</h3>
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Access</p>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="pricingType"
+                      checked={pricingType === "free"}
+                      onChange={() => setPricingType("free")}
+                      className="rounded-full border-slate-300 dark:border-slate-600 text-red-500 focus:ring-red-500/50"
+                    />
+                    <span className="text-sm text-slate-700 dark:text-slate-300">Free</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="pricingType"
+                      checked={pricingType === "paid"}
+                      onChange={() => setPricingType("paid")}
+                      className="rounded-full border-slate-300 dark:border-slate-600 text-red-500 focus:ring-red-500/50"
+                    />
+                    <span className="text-sm text-slate-700 dark:text-slate-300">Paid</span>
+                  </label>
+                </div>
+              </div>
+              {pricingType === "paid" && (
+                <Input
+                  label="Price (USD)"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  placeholder="2.99"
+                  hint="One-time purchase price"
+                />
+              )}
+            </div>
+          </Card>
+        )}
+
+        {/* Step 4: Details */}
+        {step === 4 && (
+          <Card>
+            <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-4">Step 4: Details</h3>
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Input label="Release Date" type="date" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)} />
+                <Input
+                  label="Release Year"
+                  type="number"
+                  min="1900"
+                  max="2100"
+                  step="1"
+                  value={releaseDate}
+                  onChange={(e) => setReleaseDate(e.target.value)}
+                  placeholder="2024"
+                />
                 <Input label="Duration (minutes)" type="number" value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="120" />
               </div>
               <Select label="Status" options={[{ value: "draft", label: "Draft" }, { value: "published", label: "Published" }]} value={status} onChange={(e) => setStatus(e.target.value as "draft" | "published")} />
@@ -409,10 +495,10 @@ export default function SingleMovieUploadPage() {
           </Card>
         )}
 
-        {/* Step 4: Review */}
-        {step === 4 && (
+        {/* Step 5: Review */}
+        {step === 5 && (
           <Card>
-            <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-4">Step 4: Review</h3>
+            <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-4">Step 5: Review</h3>
             <div className="space-y-6">
               <div>
                 <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Movie</p>
@@ -438,7 +524,7 @@ export default function SingleMovieUploadPage() {
 
         <div className="flex gap-3">
           {step > 1 ? <Button type="button" variant="outline" onClick={handleBack} disabled={isUploading}>Back</Button> : <Link href="/upload"><Button type="button" variant="outline" disabled={isUploading}>Cancel</Button></Link>}
-          {step < 4 ? <Button type="submit" disabled={!canProceed()}>Next</Button> : <Button type="submit" isLoading={isUploading} disabled={isUploading}>Upload Movie</Button>}
+          {step < 5 ? <Button type="submit" disabled={!canProceed()}>Next</Button> : <Button type="submit" isLoading={isUploading} disabled={isUploading}>Upload Movie</Button>}
         </div>
       </form>
 
@@ -481,7 +567,7 @@ export default function SingleMovieUploadPage() {
                     {uploadProgress < 92
                       ? "Transferring video chunks…"
                       : uploadProgress < 95
-                        ? "Finalizing thumbnail…"
+                        ? "Finalizing images…"
                         : uploadProgress < 97
                           ? "Finalizing…"
                           : uploadProgress < 100

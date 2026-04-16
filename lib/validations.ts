@@ -55,6 +55,34 @@ export function validateVideoAndThumbnail(
   );
 }
 
+export function validateVideoThumbnailAndCover(
+  videoFile: File | null | undefined,
+  thumbnailFile: File | null | undefined,
+  coverFile: File | null | undefined
+): ValidationResult {
+  return (
+    validateFilePresent(videoFile, "Video") ??
+    validateFilePresent(thumbnailFile, "Thumbnail") ??
+    validateFilePresent(coverFile, "List cover image")
+  );
+}
+
+export function validateVideoAndFourArtwork(
+  videoFile: File | null | undefined,
+  thumbnailPhone: File | null | undefined,
+  thumbnailLaptop: File | null | undefined,
+  coverPhone: File | null | undefined,
+  coverLaptop: File | null | undefined
+): ValidationResult {
+  return (
+    validateFilePresent(videoFile, "Video") ??
+    validateFilePresent(thumbnailPhone, "Thumbnail (phone)") ??
+    validateFilePresent(thumbnailLaptop, "Thumbnail (laptop)") ??
+    validateFilePresent(coverPhone, "Movie cover (phone)") ??
+    validateFilePresent(coverLaptop, "Movie cover (laptop)")
+  );
+}
+
 /**
  * Validate multipart upload completion fields.
  * Returns an error string or null.
@@ -63,11 +91,22 @@ export function validateMultipartComplete(body: {
   movieId?: unknown;
   uploadId?: unknown;
   key?: unknown;
-  thumbnailKey?: unknown;
+  thumbnailPhoneKey?: unknown;
+  thumbnailLaptopKey?: unknown;
+  coverPhoneKey?: unknown;
+  coverLaptopKey?: unknown;
   parts?: unknown;
 }): ValidationResult {
-  const { movieId, uploadId, key, thumbnailKey, parts } = body;
-  if (!movieId || !uploadId || !key || !thumbnailKey) {
+  const { movieId, uploadId, key, thumbnailPhoneKey, thumbnailLaptopKey, coverPhoneKey, coverLaptopKey, parts } = body;
+  if (
+    !movieId ||
+    !uploadId ||
+    !key ||
+    !thumbnailPhoneKey ||
+    !thumbnailLaptopKey ||
+    !coverPhoneKey ||
+    !coverLaptopKey
+  ) {
     return "Missing required fields";
   }
   if (!Array.isArray(parts) || parts.length === 0) {

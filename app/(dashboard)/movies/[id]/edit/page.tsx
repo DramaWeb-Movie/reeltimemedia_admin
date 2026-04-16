@@ -2,7 +2,7 @@
 
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -13,7 +13,9 @@ import { Spinner } from "@/components/ui/Spinner";
 import { SinglePricingSection } from "@/components/movies/edit/SinglePricingSection";
 import { SeriesAccessSection } from "@/components/movies/edit/SeriesAccessSection";
 import { SeriesEpisodesPanel } from "@/components/movies/edit/SeriesEpisodesPanel";
-import { GENRE_OPTIONS } from "@/lib/constants/genres";
+import { parseGenresFromDb, serializeGenresToDb } from "@/lib/genre-utils";
+import { GenreMultiSelect } from "@/components/ui/GenreMultiSelect";
+import { ArtworkDropSlot } from "@/components/upload/ArtworkDropSlot";
 import { toastError, toastSuccess } from "@/lib/toast";
 import {
   uploadFileInParallel,
@@ -23,9 +25,20 @@ import {
   type UploadProgress,
 } from "@/lib/upload/parallel-uploader";
 import { MAX_VIDEO_BYTES, MAX_IMAGE_BYTES } from "@/lib/r2/mime";
+import type { ArtworkRole } from "@/lib/constants/movie-artwork";
+import { ARTWORK_ROLES_ORDER, MOVIE_ARTWORK_SLOTS, MOVIE_ARTWORK_ASPECT_CLASS } from "@/lib/constants/movie-artwork";
 import type { SeriesEpisode } from "@/components/movies/edit/types";
 import type { Movie } from "@/types";
 import type { SubscriptionPlan } from "@/types";
+
+function emptyArtwork(): Record<ArtworkRole, File | null> {
+  return {
+    "thumbnail-phone": null,
+    "thumbnail-laptop": null,
+    "cover-phone": null,
+    "cover-laptop": null,
+  };
+}
 
 export default function EditMoviePage() {
   const params = useParams();
@@ -40,7 +53,7 @@ export default function EditMoviePage() {
   const [title, setTitle] = useState("");
   const [titleKh, setTitleKh] = useState("");
   const [description, setDescription] = useState("");
-  const [genre, setGenre] = useState("");
+  const [genres, setGenres] = useState<string[]>([]);
   const [cast, setCast] = useState("");
   const [price, setPrice] = useState("");
   const [releaseDate, setReleaseDate] = useState("");
@@ -68,10 +81,8 @@ export default function EditMoviePage() {
   const [addEpisodeVideo, setAddEpisodeVideo] = useState<File | null>(null);
   const [addingEpisode, setAddingEpisode] = useState(false);
 
-  // Thumbnail replacement
-  const [newThumbnailFile, setNewThumbnailFile] = useState<File | null>(null);
-  const [isReplacingThumbnail, setIsReplacingThumbnail] = useState(false);
-  const thumbnailInputRef = useRef<HTMLInputElement>(null);
+  // Artwork replacement
+  const [artworkByRole, setArtworkByRole] = useState<Record<ArtworkRole, File | null>>(emptyArtwork);
 
   // Video replacement (single movies only)
   const [newVideoFile, setNewVideoFile] = useState<File | null>(null);
@@ -104,7 +115,7 @@ export default function EditMoviePage() {
           setTitle(m.title ?? "");
           setTitleKh(m.title_kh ?? "");
           setDescription(m.description ?? "");
-          setGenre(m.genre ?? "");
+          setGenres(parseGenresFromDb(m.genre));
           setCast(m.cast ?? "");
           setPrice(m.price != null ? String(m.price) : "");
           setReleaseDate(m.release_date ?? "");
@@ -124,6 +135,29 @@ export default function EditMoviePage() {
     if (movie?.type === "series") loadEpisodes();
     else setEpisodes([]);
   }, [movie?.type, loadEpisodes]);
+
+  const artworkPreviewUrls = useMemo(() => {
+    const next: Record<ArtworkRole, string | null> = {
+      "thumbnail-phone": null,
+      "thumbnail-laptop": null,
+      "cover-phone": null,
+      "cover-laptop": null,
+    };
+    for (const role of ARTWORK_ROLES_ORDER) {
+      const file = artworkByRole[role];
+      if (file) next[role] = URL.createObjectURL(file);
+    }
+    return next;
+  }, [artworkByRole]);
+
+  useEffect(() => {
+    return () => {
+      for (const role of ARTWORK_ROLES_ORDER) {
+        const url = artworkPreviewUrls[role];
+        if (url) URL.revokeObjectURL(url);
+      }
+    };
+  }, [artworkPreviewUrls]);
 
   function openEditEpisode(ep: SeriesEpisode) {
     setEditingEpisode(ep);
@@ -215,45 +249,67 @@ export default function EditMoviePage() {
     }
   }
 
-  async function handleReplaceThumbnail() {
-    if (!newThumbnailFile) return;
-    if (newThumbnailFile.size > MAX_IMAGE_BYTES) {
-      toastError(`Thumbnail too large (max ${MAX_IMAGE_BYTES / 1024 / 1024}MB)`);
-      return;
+  async function uploadSelectedArtwork(): Promise<Record<string, string>> {
+    const thumbnailFile = artworkByRole["thumbnail-laptop"] ?? artworkByRole["thumbnail-phone"];
+    const coverFile = artworkByRole["cover-phone"] ?? artworkByRole["cover-laptop"];
+    if (!thumbnailFile && !coverFile) {
+      return {};
     }
-    setIsReplacingThumbnail(true);
-    try {
-      const initRes = await fetch(`/api/movies/${id}/replace-media`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ thumbnailType: newThumbnailFile.type, thumbnailSize: newThumbnailFile.size }),
-      });
-      const initData = await initRes.json();
-      if (!initRes.ok) throw new Error(initData.error ?? "Failed to get upload URL");
 
-      const putRes = await fetch(initData.thumbnail.uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": newThumbnailFile.type },
-        body: newThumbnailFile,
-      });
-      if (!putRes.ok) throw new Error("Failed to upload thumbnail");
-
-      const patchRes = await fetch(`/api/movies/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ thumbnail_url: initData.thumbnail.publicUrl }),
-      });
-      if (!patchRes.ok) throw new Error("Failed to save thumbnail URL");
-
-      setMovie((prev) => prev ? { ...prev, thumbnail_url: initData.thumbnail.publicUrl } : prev);
-      setNewThumbnailFile(null);
-      if (thumbnailInputRef.current) thumbnailInputRef.current.value = "";
-      toastSuccess("Thumbnail updated!");
-    } catch (err) {
-      toastError(err instanceof Error ? err.message : "Failed to replace thumbnail");
-    } finally {
-      setIsReplacingThumbnail(false);
+    for (const file of [thumbnailFile, coverFile].filter(Boolean) as File[]) {
+      if (file.size > MAX_IMAGE_BYTES) {
+        throw new Error(`Artwork too large (max ${MAX_IMAGE_BYTES / 1024 / 1024}MB)`);
+      }
     }
+
+    const initBody: Record<string, unknown> = {};
+    if (thumbnailFile) {
+      initBody.thumbnailType = thumbnailFile.type;
+      initBody.thumbnailSize = thumbnailFile.size;
+    }
+    if (coverFile) {
+      initBody.coverType = coverFile.type;
+      initBody.coverSize = coverFile.size;
+    }
+
+    const initRes = await fetch(`/api/movies/${id}/replace-media`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(initBody),
+    });
+    const initData = await initRes.json();
+    if (!initRes.ok) throw new Error(initData.error ?? "Failed to get upload URL");
+
+    const uploads: Promise<Response>[] = [];
+    if (thumbnailFile && initData.thumbnail?.uploadUrl) {
+      uploads.push(
+        fetch(initData.thumbnail.uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": thumbnailFile.type },
+          body: thumbnailFile,
+        })
+      );
+    }
+    if (coverFile && initData.cover?.uploadUrl) {
+      uploads.push(
+        fetch(initData.cover.uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": coverFile.type },
+          body: coverFile,
+        })
+      );
+    }
+
+    const uploadResults = await Promise.all(uploads);
+    if (uploadResults.some((res) => !res.ok)) {
+      throw new Error("One or more artwork uploads failed");
+    }
+
+    const patchBody: Record<string, string> = {};
+    if (initData.thumbnail?.publicUrl) patchBody.thumbnail_url = initData.thumbnail.publicUrl;
+    if (initData.cover?.publicUrl) patchBody.cover_url = initData.cover.publicUrl;
+
+    return patchBody;
   }
 
   async function handleReplaceVideo() {
@@ -337,16 +393,18 @@ export default function EditMoviePage() {
     setError(null);
     setIsSaving(true);
     try {
+      const artworkPatch = await uploadSelectedArtwork();
       const body: Record<string, unknown> = {
         title: title.trim(),
         title_kh: titleKh.trim() || null,
         description: description.trim() || null,
-        genre: genre || null,
+        genre: serializeGenresToDb(genres),
         cast: cast.trim() || null,
         release_date: releaseDate || null,
         duration: duration ? Number(duration) : null,
         status,
         trailer_url: trailerUrl.trim() || null,
+        ...artworkPatch,
       };
       if (movie.type === "single") {
         body.price = price ? Number(price) : null;
@@ -365,6 +423,7 @@ export default function EditMoviePage() {
         setError(data.error ?? "Failed to update movie");
         return;
       }
+      setArtworkByRole(emptyArtwork());
       router.push(`/movies/${id}`);
     } catch {
       setError("Failed to update movie");
@@ -415,6 +474,9 @@ export default function EditMoviePage() {
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Edit movie</h1>
         </div>
         <div className="flex items-center gap-2">
+          <Link href={`/movies/${id}/promotion`}>
+            <Button variant="outline" size="sm">Promotion Banner</Button>
+          </Link>
           <Link href={`/movies/${id}`}>
             <Button variant="outline" size="sm">← Back</Button>
           </Link>
@@ -438,7 +500,7 @@ export default function EditMoviePage() {
 
           {/* Basic info */}
           <Card padding="lg">
-              <CardHeader title="Basic info" subtitle="Titles, description, genre, and cast." />
+              <CardHeader title="Basic info" subtitle="Titles, description, genres, and cast." />
               <div className="space-y-4 mt-1">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <Input label="Title (English)" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Movie title" required />
@@ -454,56 +516,74 @@ export default function EditMoviePage() {
                     className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500 resize-none transition-colors text-sm"
                   />
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Select label="Genre" options={GENRE_OPTIONS} value={genre} onChange={(e) => setGenre(e.target.value)} placeholder="Select genre" />
-                  <CastInput label="Cast" value={cast} onChange={setCast} placeholder="Actor name" />
-                </div>
+                <GenreMultiSelect
+                  value={genres}
+                  onChange={setGenres}
+                  hint="Pick from the list and/or add your own below."
+                />
+                <CastInput label="Cast" value={cast} onChange={setCast} placeholder="Actor name" />
               </div>
             </Card>
 
           {/* Media */}
           <Card padding="lg">
-            <CardHeader title="Media" subtitle="Replace the cover image or video." />
+            <CardHeader title="Media" subtitle="Upload one movie thumbnail and one movie cover." />
             <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-6">
+              {(["thumbnail-laptop", "cover-phone"] as ArtworkRole[]).map((role) => {
+                const currentUrl =
+                  role === "thumbnail-laptop"
+                    ? movie.thumbnail_url
+                    : movie.cover_url;
+                const previewClass =
+                  role === "cover-phone" ? "w-28" : "w-44";
 
-              {/* Thumbnail */}
-              <div className="space-y-3">
-                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Thumbnail</p>
-                <div className="flex gap-3 items-start">
-                  <div
-                    className="shrink-0 w-14 aspect-2/3 rounded-lg overflow-hidden border-2 border-dashed border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 cursor-pointer hover:border-red-400 transition-colors"
-                    onClick={() => thumbnailInputRef.current?.click()}
-                  >
-                    {newThumbnailFile ? (
-                      <Image src={URL.createObjectURL(newThumbnailFile)} alt="" width={56} height={84} unoptimized className="w-full h-full object-cover" />
-                    ) : movie.thumbnail_url ? (
-                      <Image src={movie.thumbnail_url} alt="Thumbnail" width={56} height={84} unoptimized className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-slate-400">
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                return (
+                  <div key={role} className="space-y-3">
+                    <ArtworkDropSlot
+                      role={role}
+                      label={role === "thumbnail-laptop" ? "Movie thumbnail" : "Movie cover"}
+                      description={
+                        role === "thumbnail-laptop"
+                          ? "Main thumbnail image for this movie."
+                          : "Main cover image for this movie."
+                      }
+                      file={
+                        role === "thumbnail-laptop"
+                          ? (artworkByRole["thumbnail-laptop"] ?? artworkByRole["thumbnail-phone"])
+                          : (artworkByRole["cover-phone"] ?? artworkByRole["cover-laptop"])
+                      }
+                      onChange={(file) =>
+                        setArtworkByRole((prev) =>
+                          role === "thumbnail-laptop"
+                            ? { ...prev, "thumbnail-phone": file, "thumbnail-laptop": file }
+                            : { ...prev, "cover-phone": file, "cover-laptop": file }
+                        )
+                      }
+                    />
+                    {(artworkPreviewUrls[role] || currentUrl) ? (
+                      <div>
+                        <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
+                          {artworkPreviewUrls[role] ? "Selected preview" : "Current"}
+                        </p>
+                        <div className={`rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 ${previewClass} ${MOVIE_ARTWORK_ASPECT_CLASS[role]}`}>
+                          <Image
+                            src={artworkPreviewUrls[role] ?? currentUrl!}
+                            alt={MOVIE_ARTWORK_SLOTS[role].label}
+                            width={300}
+                            height={180}
+                            unoptimized
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
                       </div>
-                    )}
+                    ) : null}
                   </div>
-                  <div className="flex-1 min-w-0 space-y-2">
-                    <input ref={thumbnailInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => setNewThumbnailFile(e.target.files?.[0] ?? null)} />
-                    <button
-                      type="button"
-                      onClick={() => thumbnailInputRef.current?.click()}
-                      className="w-full py-2 px-3 rounded-lg border border-slate-300 dark:border-slate-600 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-left truncate"
-                    >
-                      {newThumbnailFile ? newThumbnailFile.name : "Choose image…"}
-                    </button>
-                    {newThumbnailFile && <p className="text-xs text-slate-400">{formatBytes(newThumbnailFile.size)}</p>}
-                    <Button type="button" size="sm" variant="secondary" disabled={!newThumbnailFile || isReplacingThumbnail} isLoading={isReplacingThumbnail} onClick={handleReplaceThumbnail}>
-                      {isReplacingThumbnail ? "Uploading…" : "Upload"}
-                    </Button>
-                  </div>
-                </div>
-              </div>
+                );
+              })}
 
               {/* Video (single only) */}
               {movie.type === "single" && (
-                <div className="space-y-3">
+                <div className="space-y-3 sm:col-span-2">
                   <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Video</p>
                   {movie.video_url && (
                     <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
@@ -593,7 +673,10 @@ export default function EditMoviePage() {
         {/* ── Sidebar ─────────────────────────────────────────────── */}
         <div className="space-y-6">
           <Card padding="lg" className="lg:sticky lg:top-6">
-            <CardHeader title="Details" subtitle="Date, duration, status, trailer." />
+            <CardHeader
+              title="Details"
+              subtitle={movie.type === "series" ? "Date, duration, status, and trailer (YouTube or direct link)." : "Date, duration, status, trailer."}
+            />
             <div className="mt-1 space-y-4">
               <Input label="Release date" type="date" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)} />
               <Input label="Duration (minutes)" type="number" min="0" value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="—" />

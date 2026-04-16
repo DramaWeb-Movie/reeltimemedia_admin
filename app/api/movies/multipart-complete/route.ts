@@ -22,8 +22,8 @@ function buildPublicUrl(key: string): string {
  * POST /api/movies/multipart-complete
  * Complete a multipart upload after all parts are uploaded.
  *
- * videoUrl and thumbnailUrl are constructed server-side from the keys — the
- * client is never trusted to supply arbitrary URLs into the database.
+ * Image URLs are constructed server-side from the keys — the client is never trusted
+ * to supply arbitrary URLs into the database.
  */
 export async function POST(request: NextRequest) {
   const auth = await requireAuth();
@@ -35,39 +35,58 @@ export async function POST(request: NextRequest) {
     const {
       movieId,
       uploadId,
-      key,          // video key, e.g. "movies/<id>/video.mp4"
-      thumbnailKey, // thumbnail key, e.g. "movies/<id>/thumbnail.jpg"
+      key,
+      thumbnailPhoneKey,
+      thumbnailLaptopKey,
+      coverPhoneKey,
+      coverLaptopKey,
       parts,
       finalStatus = "draft",
     } = body;
 
-    const fieldsError = validateMultipartComplete({ movieId, uploadId, key, thumbnailKey, parts });
+    const fieldsError = validateMultipartComplete({
+      movieId,
+      uploadId,
+      key,
+      thumbnailPhoneKey,
+      thumbnailLaptopKey,
+      coverPhoneKey,
+      coverLaptopKey,
+      parts,
+    });
     if (fieldsError) return NextResponse.json({ error: fieldsError }, { status: 400 });
 
     const statusError = validateFinalStatus(finalStatus);
     if (statusError) return NextResponse.json({ error: statusError }, { status: 400 });
 
-    // Validate keys belong to this movie so clients can't forge arbitrary paths
     const videoKeyError = validateKeyBelongsToMovie(key, movieId);
     if (videoKeyError) return NextResponse.json({ error: "Invalid video key" }, { status: 400 });
 
-    const thumbKeyError = validateKeyBelongsToMovie(thumbnailKey, movieId);
-    if (thumbKeyError) return NextResponse.json({ error: "Invalid thumbnail key" }, { status: 400 });
+    for (const [label, imgKey] of [
+      ["thumbnail phone", thumbnailPhoneKey],
+      ["thumbnail laptop", thumbnailLaptopKey],
+      ["cover phone", coverPhoneKey],
+      ["cover laptop", coverLaptopKey],
+    ] as const) {
+      const e = validateKeyBelongsToMovie(imgKey, movieId);
+      if (e) return NextResponse.json({ error: `Invalid ${label} key` }, { status: 400 });
+    }
 
-    // Complete the multipart upload in R2
     await completeMultipartUpload(key, uploadId, parts);
 
-    // Construct URLs server-side — never from client input
+    const thumbnailPhoneUrl = buildPublicUrl(thumbnailPhoneKey);
+    const thumbnailLaptopUrl = buildPublicUrl(thumbnailLaptopKey);
+    const coverPhoneUrl = buildPublicUrl(coverPhoneKey);
+    const coverLaptopUrl = buildPublicUrl(coverLaptopKey);
     const videoUrl = buildPublicUrl(key);
-    const thumbnailUrl = buildPublicUrl(thumbnailKey);
 
-    // Update movie record: set real URLs and promote to the user's chosen status
     const supabase = createAdminClient();
     const { error: updateError } = await supabase
       .from("movies")
       .update({
         video_url: videoUrl,
-        thumbnail_url: thumbnailUrl,
+        thumbnail_url: thumbnailLaptopUrl,
+        cover_url: coverPhoneUrl,
         status: finalStatus,
         updated_at: new Date().toISOString(),
       })
@@ -109,7 +128,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      movie: { id: movieId, video_url: videoUrl, thumbnail_url: thumbnailUrl },
+      movie: {
+        id: movieId,
+        video_url: videoUrl,
+        thumbnail_url: thumbnailLaptopUrl,
+        cover_url: coverPhoneUrl,
+      },
     });
   } catch (err) {
     log.error("Multipart complete error", err);
@@ -121,7 +145,6 @@ export async function POST(request: NextRequest) {
 /**
  * DELETE /api/movies/multipart-complete
  * Abort a multipart upload and delete the orphaned movie record.
- * Called automatically by the client on any upload failure or cancellation.
  */
 export async function DELETE(request: NextRequest) {
   const auth = await requireAuth();
@@ -162,15 +185,13 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Abort the in-progress multipart upload to avoid R2 storage charges
     await abortMultipartUpload(key, uploadId);
 
-    // Delete the orphaned "uploading" movie record
     const { error } = await supabase
       .from("movies")
       .delete()
       .eq("id", movieId)
-      .eq("status", "uploading"); // safety guard: only delete if still in uploading state
+      .eq("status", "uploading");
 
     if (error) {
       log.warn("Failed to delete orphaned movie record", { movieId, error });

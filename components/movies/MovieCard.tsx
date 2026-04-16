@@ -1,9 +1,14 @@
 import Link from "next/link";
 import Image from "next/image";
 import type { Movie } from "@/types";
+import { formatGenresDisplay } from "@/lib/genre-utils";
 
 interface MovieCardProps {
   movie: Movie;
+}
+
+function getMovieListImage(movie: Movie): string | null {
+  return movie.cover_url ?? movie.thumbnail_url;
 }
 
 function formatDisplayDate(dateStr: string | null): string {
@@ -16,7 +21,9 @@ function formatDisplayDate(dateStr: string | null): string {
 export function MovieCard({ movie }: MovieCardProps) {
   const isSeries = movie.type === "series";
   const displayDate = formatDisplayDate(movie.release_date);
-  const tagLabel = movie.genre || (isSeries ? "Series" : "Movie");
+  const genreLine = formatGenresDisplay(movie.genre);
+  const tagLabel = genreLine || (isSeries ? "Series" : "Movie");
+  const listImageUrl = getMovieListImage(movie);
 
   return (
     <Link
@@ -25,10 +32,10 @@ export function MovieCard({ movie }: MovieCardProps) {
     >
       <div className="rounded-xl overflow-hidden bg-slate-900/80 border border-slate-800/80 shadow-sm transition-all duration-200 group-hover:border-red-500/70">
         {/* Poster with aspect ratio 2:3 */}
-        <div className="relative aspect-[2/3] w-full overflow-hidden">
-          {movie.thumbnail_url ? (
+        <div className="relative aspect-2/3 w-full overflow-hidden">
+          {listImageUrl ? (
             <Image
-              src={movie.thumbnail_url}
+              src={listImageUrl}
               alt={movie.title}
               fill
               unoptimized
@@ -43,7 +50,10 @@ export function MovieCard({ movie }: MovieCardProps) {
           )}
           {/* Top-left tag/badge */}
           <div className="absolute top-1.5 left-1.5">
-            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-red-600 text-white text-[10px] font-medium">
+            <span
+              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-red-600 text-white text-[10px] font-medium max-w-[min(12rem,85%)] line-clamp-2 leading-tight text-left"
+              title={genreLine || undefined}
+            >
               {tagLabel}
             </span>
           </div>
